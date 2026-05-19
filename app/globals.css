@@ -1,26 +1,82 @@
+@import url('https://fonts.googleapis.com/css2?family=Nunito+Sans:wght@300;400;700;800;900&display=swap');
 @import "tailwindcss";
+@import "tw-animate-css";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
+@custom-variant dark (&:is(.dark *));
+
+/* ============================================================
+   Avenue Z Brand Design System
+   ============================================================ */
 
 @theme inline {
+  --font-sans: 'Nunito Sans', sans-serif;
+
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 24px;
+  --radius-2xl: calc(var(--radius) + 8px);
+
+  /* Avenue Z brand colors */
+  --color-brand-yellow: #FFFC60;
+  --color-brand-green: #60FF80;
+  --color-brand-cyan: #60FDFF;
+  --color-brand-blue: #39A0FF;
+  --color-brand-purple: #6034FF;
+  --color-bg-surface: #272727;
+  --color-bg-subtle: #1a1a1a;
+  --color-text-muted: #8A8A8A;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+:root {
+  --radius: 0.75rem;
+
+  --background: #000000;
+  --foreground: #FFFFFF;
+  --card: #272727;
+  --card-foreground: #FFFFFF;
+  --popover: #272727;
+  --popover-foreground: #FFFFFF;
+  --primary: #60FDFF;
+  --primary-foreground: #000000;
+  --secondary: #272727;
+  --secondary-foreground: #FFFFFF;
+  --muted: #1a1a1a;
+  --muted-foreground: #8A8A8A;
+  --accent: #60FDFF;
+  --accent-foreground: #000000;
+  --destructive: #FF4444;
+  --border: rgba(255, 255, 255, 0.08);
+  --input: #272727;
+  --ring: #60FDFF;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
   }
-}
-
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  body {
+    @apply bg-background text-foreground;
+    font-family: 'Nunito Sans', sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
 }
