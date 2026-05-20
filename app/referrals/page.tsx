@@ -10,7 +10,7 @@ import { LogOut } from 'lucide-react'
 export const dynamic = 'force-dynamic'
 
 export default async function ReferralsPage() {
-  const [session, partners, log] = await Promise.all([
+  const [session, partnerResult, log] = await Promise.all([
     auth(),
     getTier1Partners(),
     getReferralLog(),
@@ -59,7 +59,11 @@ export default async function ReferralsPage() {
           </p>
         </div>
 
-        <ReferralForm partners={partners} submitterName={userName} />
+        <ReferralForm
+          partners={partnerResult.ok ? partnerResult.partners : []}
+          partnerError={partnerResult.ok ? undefined : partnerResult.error}
+          submitterName={userName}
+        />
 
         <ReferralLog entries={log} />
       </main>

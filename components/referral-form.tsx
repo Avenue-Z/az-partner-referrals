@@ -14,6 +14,7 @@ type Partner = { id: string; name: string }
 
 type Props = {
   partners: Partner[]
+  partnerError?: string
   submitterName: string
 }
 
@@ -39,7 +40,7 @@ const EMPTY: FormState = {
   notes: '',
 }
 
-export function ReferralForm({ partners, submitterName }: Props) {
+export function ReferralForm({ partners, partnerError, submitterName }: Props) {
   const router = useRouter()
   const [form, setForm] = useState<FormState>(EMPTY)
   const [partnerSearch, setPartnerSearch] = useState('')
@@ -100,6 +101,15 @@ export function ReferralForm({ partners, submitterName }: Props) {
           Submitting as <span className="text-white font-medium">{submitterName}</span>
         </CardDescription>
       </CardHeader>
+      {partnerError && (
+        <div className="mx-6 mb-2 flex items-start gap-2 rounded-lg border border-[#FF4444]/30 bg-[#FF4444]/8 px-4 py-3 text-sm text-[#FF4444]">
+          <AlertCircle className="size-4 shrink-0 mt-0.5" />
+          <div>
+            <p className="font-semibold">HubSpot connection error</p>
+            <p className="mt-0.5 text-[#FF4444]/80">{partnerError}</p>
+          </div>
+        </div>
+      )}
       <CardContent>
         <form onSubmit={handleSubmit} className="space-y-6">
           {/* Lead info */}

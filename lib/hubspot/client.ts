@@ -25,39 +25,69 @@ export type ReferralLogEntry = {
   dateModified: string
 }
 
+export type PartnerFetchResult =
+  | { ok: true; partners: PartnerCompany[] }
+  | { ok: false; error: string }
+
 /** Fetch all Tier 1 partner companies, paginating until exhausted. */
-export async function getTier1Partners(): Promise<PartnerCompany[]> {
-  const hs = getHubSpotClient()
+export async function getTier1Partners(): Promise<PartnerFetchResult> {
+  let hs: Client
+  try {
+    hs = getHubSpotClient()
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : 'HubSpot client error' }
+  }
+
   const partners: PartnerCompany[] = []
   let after: string | undefined
 
-  do {
-    const res = await hs.crm.companies.searchApi.doSearch({
-      filterGroups: [{
-        filters: [
-          { propertyName: 'type', operator: 'EQ' as any, value: 'PARTNER' },
-          { propertyName: 'tier', operator: 'EQ' as any, value: 'Tier 1' },
-        ],
-      }],
-      properties: ['name'],
-      sorts: ['name'],
-      limit: 200,
-      after: after ?? '0',
-    })
+  try {
+    do {
+      const res = await hs.crm.companies.searchApi.doSearch({
+        filterGroups: [{
+          filters: [
+            { propertyName: 'type', operator: 'EQ' as any, value: 'PARTNER' },
+            { propertyName: 'tier', operator: 'EQ' as any, value: 'Tier 1' },
+          ],
+        }],
+        properties: ['name'],
+        sorts: ['name'],
+        limit: 200,
+        after: after ?? '0',
+      })
 
-    for (const c of res.results ?? []) {
-      const name = (c.properties as Record<string, string | null>).name
-      if (name) partners.push({ id: c.id, name })
+      for (const c of res.results ?? []) {
+        const name = (c.properties as Record<string, string | null>).name
+        if (name) partners.push({ id: c.id, name })
+      }
+      after = res.paging?.next?.after
+    } while (after)
+  } catch (err: any) {
+    const status = err?.code ?? err?.statusCode ?? ''
+    const message = err?.message ?? String(err)
+    console.error('[getTier1Partners] HubSpot error:', status, message)
+
+    if (String(status) === '403' || message.includes('scope') || message.includes('MISSING_SCOPES')) {
+      return { ok: false, error: 'Missing HubSpot scope: crm.objects.companies.read — add it to your Service Key.' }
     }
-    after = res.paging?.next?.after
-  } while (after)
+    if (String(status) === '401') {
+      return { ok: false, error: 'Invalid HubSpot token — check HUBSPOT_ACCESS_TOKEN in Vercel.' }
+    }
+    return { ok: false, error: `HubSpot error (${status || 'unknown'}): ${message}` }
+  }
 
-  return partners.sort((a, b) => a.name.localeCompare(b.name))
+  return { ok: true, partners: partners.sort((a, b) => a.name.localeCompare(b.name)) }
 }
 
-/** Fetch recent referrals — companies where referred_to_partner = Yes. */
+/** Fetch recent referrals — companies where referred_to_partner = Yes. Non-throwing. */
 export async function getReferralLog(): Promise<ReferralLogEntry[]> {
-  const hs = getHubSpotClient()
+  let hs: Client
+  try {
+    hs = getHubSpotClient()
+  } catch {
+    return []
+  }
+
   const entries: ReferralLogEntry[] = []
   let ownerMap: Record<string, string> = {}
 
@@ -70,6 +100,7 @@ export async function getReferralLog(): Promise<ReferralLogEntry[]> {
     }
   } catch { /* non-fatal */ }
 
+  try {
   const res = await hs.crm.companies.searchApi.doSearch({
     filterGroups: [{
       filters: [
@@ -95,6 +126,10 @@ export async function getReferralLog(): Promise<ReferralLogEntry[]> {
         ? new Date(p.hs_lastmodifieddate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
         : '—',
     })
+  }
+  } catch (err) {
+    console.error('[getReferralLog] HubSpot error:', err)
+    // non-fatal — page still renders, log just shows empty
   }
 
   return entries
