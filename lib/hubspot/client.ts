@@ -29,7 +29,10 @@ export type PartnerFetchResult =
   | { ok: true; partners: PartnerCompany[] }
   | { ok: false; error: string }
 
-/** Fetch all Tier 1 partner companies, paginating until exhausted. */
+// Custom partners object type ID in HubSpot portal 308777
+const PARTNERS_OBJECT_TYPE = '2-17260992'
+
+/** Fetch all Tier 1 partners from the custom partners object, paginating until exhausted. */
 export async function getTier1Partners(): Promise<PartnerFetchResult> {
   let hs: Client
   try {
@@ -43,21 +46,20 @@ export async function getTier1Partners(): Promise<PartnerFetchResult> {
 
   try {
     do {
-      const res = await hs.crm.companies.searchApi.doSearch({
+      const res = await hs.crm.objects.searchApi.doSearch(PARTNERS_OBJECT_TYPE, {
         filterGroups: [{
           filters: [
-            { propertyName: 'type', operator: 'EQ' as any, value: 'PARTNER' },
-            { propertyName: 'tier', operator: 'EQ' as any, value: 'Tier 1' },
+            { propertyName: 'tier', operator: 'EQ' as any, value: 'tier_1' },
           ],
         }],
-        properties: ['name'],
-        sorts: ['name'],
+        properties: ['partner_name'],
+        sorts: ['partner_name'],
         limit: 200,
         after: after ?? '0',
       })
 
       for (const c of res.results ?? []) {
-        const name = (c.properties as Record<string, string | null>).name
+        const name = (c.properties as Record<string, string | null>).partner_name
         if (name) partners.push({ id: c.id, name })
       }
       after = res.paging?.next?.after
@@ -68,7 +70,7 @@ export async function getTier1Partners(): Promise<PartnerFetchResult> {
     console.error('[getTier1Partners] HubSpot error:', status, message)
 
     if (String(status) === '403' || message.includes('scope') || message.includes('MISSING_SCOPES')) {
-      return { ok: false, error: 'Missing HubSpot scope: crm.objects.companies.read — add it to your Service Key.' }
+      return { ok: false, error: 'Missing HubSpot scope: crm.objects.custom.read — add it to your Service Key.' }
     }
     if (String(status) === '401') {
       return { ok: false, error: 'Invalid HubSpot token — check HUBSPOT_ACCESS_TOKEN in Vercel.' }
@@ -236,12 +238,12 @@ export async function logReferral(payload: ReferralPayload): Promise<void> {
     )
   } catch { /* non-fatal if association already exists */ }
 
-  // 5. Associate lead company → partner company
+  // 5. Associate lead company → custom partner object record
   try {
     await hs.crm.associations.v4.basicApi.create(
       'companies', companyId,
-      'companies', payload.partnerId,
-      [{ associationCategory: 'HUBSPOT_DEFINED' as any, associationTypeId: 450 }],
+      PARTNERS_OBJECT_TYPE, payload.partnerId,
+      [{ associationCategory: 'USER_DEFINED' as any, associationTypeId: 1 }],
     )
-  } catch { /* non-fatal */ }
+  } catch { /* non-fatal — association type IDs may need adjustment per portal */ }
 }
