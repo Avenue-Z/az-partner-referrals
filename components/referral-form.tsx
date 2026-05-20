@@ -41,6 +41,10 @@ export function ReferralForm({ partners, partnerError, submitterName }: Props) {
   const [matchedContact, setMatchedContact] = useState<ContactMatch | null>(null)
   const [matchedCompany, setMatchedCompany] = useState<CompanyMatch | null>(null)
 
+  // ── Owner reassignment ────────────────────────────────────────────────────────
+  const [assignContactToMe, setAssignContactToMe] = useState(false)
+  const [assignCompanyToMe, setAssignCompanyToMe] = useState(false)
+
   // ── Partner selection ─────────────────────────────────────────────────────────
   const [selectedPartnerIds, setSelectedPartnerIds] = useState<string[]>([])
 
@@ -61,6 +65,8 @@ export function ReferralForm({ partners, partnerError, submitterName }: Props) {
     setMatchedContact(null)
     setMatchedCompany(null)
     setCompanyState('idle')
+    setAssignContactToMe(false)
+    setAssignCompanyToMe(false)
     setFirstName('')
     setLastName('')
     setCompanyName('')
@@ -165,16 +171,18 @@ export function ReferralForm({ partners, partnerError, submitterName }: Props) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          firstName:         resolvedFirst,
-          lastName:          resolvedLast,
+          firstName:            resolvedFirst,
+          lastName:             resolvedLast,
           email,
-          companyName:       resolvedCompany,
-          companyDomain:     resolvedDomain   || undefined,
-          existingContactId: matchedContact?.id,
-          existingCompanyId: matchedCompany?.id,
-          partnerIds:        selectedPartnerIds,
-          partnerNames:      selectedPartners.map((p) => p.name),
-          notes:             notes || undefined,
+          companyName:          resolvedCompany,
+          companyDomain:        resolvedDomain || undefined,
+          existingContactId:    matchedContact?.id,
+          existingCompanyId:    matchedCompany?.id,
+          reassignContactOwner: assignContactToMe,
+          reassignCompanyOwner: assignCompanyToMe,
+          partnerIds:           selectedPartnerIds,
+          partnerNames:         selectedPartners.map((p) => p.name),
+          notes:                notes || undefined,
         }),
       })
 
@@ -189,6 +197,7 @@ export function ReferralForm({ partners, partnerError, submitterName }: Props) {
       setCompanyName('');   setCompanyDomain(''); setNotes('')
       setEmailState('idle'); setCompanyState('idle')
       setMatchedContact(null); setMatchedCompany(null)
+      setAssignContactToMe(false); setAssignCompanyToMe(false)
       setSelectedPartnerIds([])
       router.refresh()
     } catch (err) {
@@ -199,13 +208,20 @@ export function ReferralForm({ partners, partnerError, submitterName }: Props) {
 
   // ── Render helpers ────────────────────────────────────────────────────────────
 
-  /** Cyan card for existing HubSpot records — shows labeled key/value rows */
+  /**
+   * Cyan card for existing HubSpot records.
+   * The owner row is handled separately so it can show an "Assign to me" affordance.
+   */
   function MatchCard({
-    icon: Icon, label, rows, note,
+    icon: Icon, label, rows, ownerName, assignedToMe, onAssignToMe, note,
   }: {
     icon: React.ElementType
     label: string
+    /** Non-owner rows (Name, Email, Domain, etc.) */
     rows: Array<{ key: string; value: string | null | undefined }>
+    ownerName: string | null
+    assignedToMe?: boolean
+    onAssignToMe?: () => void
     note?: string
   }) {
     return (
@@ -213,15 +229,40 @@ export function ReferralForm({ partners, partnerError, submitterName }: Props) {
         <Icon className="size-4 shrink-0 text-[#60FDFF] mt-0.5" />
         <div className="min-w-0 flex-1 space-y-1">
           <p className="text-[10px] font-bold tracking-[0.18em] uppercase text-[#60FDFF]">{label}</p>
+
           {rows.filter((r) => r.value).map(({ key, value }) => (
             <p key={key} className="text-sm text-[#8A8A8A]">
-              {key}:{' '}
-              <span className="text-white">{value}</span>
+              {key}: <span className="text-white">{value}</span>
             </p>
           ))}
-          {note && (
-            <p className="text-xs text-[#60FDFF]/60 pt-0.5">{note}</p>
+
+          {/* Owner row — three states: known, assigned-to-me, unknown */}
+          {ownerName ? (
+            <p className="text-sm text-[#8A8A8A]">
+              Owner: <span className="text-white">{ownerName}</span>
+            </p>
+          ) : assignedToMe ? (
+            <p className="text-sm text-[#8A8A8A]">
+              Owner: <span className="text-[#60FDFF]">You</span>
+            </p>
+          ) : (
+            <div className="flex items-center gap-2 flex-wrap">
+              <p className="text-sm text-[#8A8A8A]">
+                Owner: <span className="text-[#8A8A8A]/50">Unknown</span>
+              </p>
+              {onAssignToMe && (
+                <button
+                  type="button"
+                  onClick={onAssignToMe}
+                  className="text-xs text-[#60FDFF] underline underline-offset-2 hover:no-underline transition-all"
+                >
+                  Assign to me
+                </button>
+              )}
+            </div>
           )}
+
+          {note && <p className="text-xs text-[#60FDFF]/60 pt-0.5">{note}</p>}
         </div>
       </div>
     )
@@ -240,9 +281,7 @@ export function ReferralForm({ partners, partnerError, submitterName }: Props) {
         <Icon className="size-4 shrink-0 text-[#FFAB40] mt-0.5" />
         <div className="space-y-0.5">
           <p className="text-[10px] font-bold tracking-[0.18em] uppercase text-[#FFAB40]">{label}</p>
-          {note && (
-            <p className="text-xs text-[#FFAB40]/70">{note}</p>
-          )}
+          {note && <p className="text-xs text-[#FFAB40]/70">{note}</p>}
         </div>
       </div>
     )
@@ -306,15 +345,17 @@ export function ReferralForm({ partners, partnerError, submitterName }: Props) {
                 rows={[
                   { key: 'Name',  value: `${matchedContact.firstName} ${matchedContact.lastName}`.trim() || null },
                   { key: 'Email', value: matchedContact.email },
-                  { key: 'Owner', value: matchedContact.ownerName },
                 ]}
+                ownerName={matchedContact.ownerName}
+                assignedToMe={assignContactToMe}
+                onAssignToMe={() => setAssignContactToMe(true)}
               />
             )}
 
             {/* New contact — name fields only shown when contact not found */}
             {needsName && (
               <>
-                <NewCard icon={UserPlus} label="New Contact" note="Will be created in HubSpot" />
+                <NewCard icon={UserPlus} label="New Contact" note="Will be created in HubSpot and assigned to you." />
                 <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-1.5">
                     <Label htmlFor="firstName" className="text-white text-sm">
@@ -354,8 +395,10 @@ export function ReferralForm({ partners, partnerError, submitterName }: Props) {
                 rows={[
                   { key: 'Name',   value: matchedCompany.name },
                   { key: 'Domain', value: matchedCompany.domain || null },
-                  { key: 'Owner',  value: matchedCompany.ownerName },
                 ]}
+                ownerName={matchedCompany.ownerName}
+                assignedToMe={assignCompanyToMe}
+                onAssignToMe={() => setAssignCompanyToMe(true)}
                 note={
                   contactKnown && !matchedContact?.associatedCompanyId
                     ? 'Contact will be associated with this company'
@@ -378,7 +421,7 @@ export function ReferralForm({ partners, partnerError, submitterName }: Props) {
             {showCompanyFields && companyState !== 'found' && (
               <>
                 {companyState === 'not-found' && (
-                  <NewCard icon={PlusCircle} label="New Company" note="Will be created in HubSpot" />
+                  <NewCard icon={PlusCircle} label="New Company" note="Will be created in HubSpot and assigned to you." />
                 )}
                 <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-1.5">

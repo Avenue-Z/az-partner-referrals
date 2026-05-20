@@ -20,6 +20,7 @@ export async function POST(req: NextRequest) {
     companyName, companyDomain,
     partnerIds, partnerNames,
     existingContactId, existingCompanyId,
+    reassignContactOwner, reassignCompanyOwner,
     notes,
   } = body as Record<string, unknown>
 
@@ -28,7 +29,7 @@ export async function POST(req: NextRequest) {
     typeof lastName  !== 'string' || !lastName  ||
     typeof email     !== 'string' || !email     ||
     typeof companyName !== 'string' || !companyName ||
-    !Array.isArray(partnerIds)  || partnerIds.length  === 0 ||
+    !Array.isArray(partnerIds)   || partnerIds.length   === 0 ||
     !Array.isArray(partnerNames) || partnerNames.length === 0
   ) {
     return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
@@ -40,10 +41,12 @@ export async function POST(req: NextRequest) {
       lastName,
       email,
       companyName,
-      companyDomain:     typeof companyDomain     === 'string' ? companyDomain     : undefined,
-      existingContactId: typeof existingContactId === 'string' ? existingContactId : undefined,
-      existingCompanyId: typeof existingCompanyId === 'string' ? existingCompanyId : undefined,
-      partnerIds:   partnerIds  as string[],
+      companyDomain:        typeof companyDomain        === 'string'  ? companyDomain        : undefined,
+      existingContactId:    typeof existingContactId    === 'string'  ? existingContactId    : undefined,
+      existingCompanyId:    typeof existingCompanyId    === 'string'  ? existingCompanyId    : undefined,
+      reassignContactOwner: reassignContactOwner === true,
+      reassignCompanyOwner: reassignCompanyOwner === true,
+      partnerIds:   partnerIds   as string[],
       partnerNames: partnerNames as string[],
       notes: typeof notes === 'string' ? notes : undefined,
       submitterEmail: session.user.email,
