@@ -137,12 +137,6 @@ export function ReferralForm({ partners, partnerError, submitterName }: Props) {
   // Whether to show company fields (when contact exists but has no company, or contact doesn't exist)
   const showCompanyFields = (contactKnown && companyState !== 'found') || emailState === 'not-found'
 
-  // Scenario badges shown on the company match card
-  const companySituation = (): string | null => {
-    if (!contactKnown || !companyKnown) return null
-    return null // both matched — no extra note needed in normal flow
-  }
-
   // Can submit
   const canSubmit =
     email.includes('@') &&
@@ -204,42 +198,52 @@ export function ReferralForm({ partners, partnerError, submitterName }: Props) {
   }
 
   // ── Render helpers ────────────────────────────────────────────────────────────
-  function OwnerBadge({ name }: { name: string | null }) {
-    if (!name) return null
-    return (
-      <span className="text-xs text-[#8A8A8A]">Owner: <span className="text-white">{name}</span></span>
-    )
-  }
 
+  /** Cyan card for existing HubSpot records — shows labeled key/value rows */
   function MatchCard({
-    icon: Icon, label, name, sub, ownerName, note,
+    icon: Icon, label, rows, note,
   }: {
     icon: React.ElementType
     label: string
-    name: string
-    sub?: string
-    ownerName: string | null
+    rows: Array<{ key: string; value: string | null | undefined }>
     note?: string
   }) {
     return (
       <div className="flex items-start gap-3 rounded-lg border border-[#60FDFF]/25 bg-[#60FDFF]/6 px-4 py-3">
         <Icon className="size-4 shrink-0 text-[#60FDFF] mt-0.5" />
-        <div className="min-w-0 flex-1 space-y-0.5">
-          <p className="text-xs font-semibold tracking-wide uppercase text-[#60FDFF]/70">{label}</p>
-          <p className="text-sm font-medium text-white truncate">{name}</p>
-          {sub  && <p className="text-xs text-[#8A8A8A]">{sub}</p>}
-          {note && <p className="text-xs text-[#60FDFF]/60 mt-1">{note}</p>}
-          <OwnerBadge name={ownerName} />
+        <div className="min-w-0 flex-1 space-y-1">
+          <p className="text-[10px] font-bold tracking-[0.18em] uppercase text-[#60FDFF]">{label}</p>
+          {rows.filter((r) => r.value).map(({ key, value }) => (
+            <p key={key} className="text-sm text-[#8A8A8A]">
+              {key}:{' '}
+              <span className="text-white">{value}</span>
+            </p>
+          ))}
+          {note && (
+            <p className="text-xs text-[#60FDFF]/60 pt-0.5">{note}</p>
+          )}
         </div>
       </div>
     )
   }
 
-  function NewBadge({ icon: Icon, label }: { icon: React.ElementType; label: string }) {
+  /** Amber card for records that will be newly created */
+  function NewCard({
+    icon: Icon, label, note,
+  }: {
+    icon: React.ElementType
+    label: string
+    note?: string
+  }) {
     return (
-      <div className="flex items-center gap-2 rounded-lg border border-white/10 bg-white/4 px-3 py-2">
-        <Icon className="size-3.5 shrink-0 text-[#8A8A8A]" />
-        <span className="text-xs text-[#8A8A8A]">{label}</span>
+      <div className="flex items-start gap-3 rounded-lg border border-[#FFAB40]/25 bg-[#FFAB40]/6 px-4 py-3">
+        <Icon className="size-4 shrink-0 text-[#FFAB40] mt-0.5" />
+        <div className="space-y-0.5">
+          <p className="text-[10px] font-bold tracking-[0.18em] uppercase text-[#FFAB40]">{label}</p>
+          {note && (
+            <p className="text-xs text-[#FFAB40]/70">{note}</p>
+          )}
+        </div>
       </div>
     )
   }
@@ -299,16 +303,18 @@ export function ReferralForm({ partners, partnerError, submitterName }: Props) {
               <MatchCard
                 icon={UserCheck}
                 label="Existing Contact"
-                name={`${matchedContact.firstName} ${matchedContact.lastName}`.trim()}
-                sub={matchedContact.email}
-                ownerName={matchedContact.ownerName}
+                rows={[
+                  { key: 'Name',  value: `${matchedContact.firstName} ${matchedContact.lastName}`.trim() || null },
+                  { key: 'Email', value: matchedContact.email },
+                  { key: 'Owner', value: matchedContact.ownerName },
+                ]}
               />
             )}
 
             {/* New contact — name fields only shown when contact not found */}
             {needsName && (
               <>
-                <NewBadge icon={UserPlus} label="New contact — will be created in HubSpot" />
+                <NewCard icon={UserPlus} label="New Contact" note="Will be created in HubSpot" />
                 <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-1.5">
                     <Label htmlFor="firstName" className="text-white text-sm">
@@ -345,15 +351,17 @@ export function ReferralForm({ partners, partnerError, submitterName }: Props) {
               <MatchCard
                 icon={Building2}
                 label="Existing Company"
-                name={matchedCompany.name}
-                sub={matchedCompany.domain || undefined}
-                ownerName={matchedCompany.ownerName}
+                rows={[
+                  { key: 'Name',   value: matchedCompany.name },
+                  { key: 'Domain', value: matchedCompany.domain || null },
+                  { key: 'Owner',  value: matchedCompany.ownerName },
+                ]}
                 note={
                   contactKnown && !matchedContact?.associatedCompanyId
                     ? 'Contact will be associated with this company'
                     : emailState === 'not-found'
                       ? 'New contact will be associated with this company'
-                      : companySituation() ?? undefined
+                      : undefined
                 }
               />
             )}
@@ -370,7 +378,7 @@ export function ReferralForm({ partners, partnerError, submitterName }: Props) {
             {showCompanyFields && companyState !== 'found' && (
               <>
                 {companyState === 'not-found' && (
-                  <NewBadge icon={PlusCircle} label="New company — will be created in HubSpot" />
+                  <NewCard icon={PlusCircle} label="New Company" note="Will be created in HubSpot" />
                 )}
                 <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-1.5">
