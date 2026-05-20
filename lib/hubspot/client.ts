@@ -10,27 +10,42 @@ export function getHubSpotClient(): Client {
   return _client
 }
 
+// Custom partners object type ID in HubSpot portal 308777
+export const PARTNERS_OBJECT_TYPE = '2-17260992'
+
+// ── Partner types ────────────────────────────────────────────────────────────
+
 export type PartnerCompany = {
   id: string
   name: string
+  companyType: string | null
+  serviceOffered: string | null
 }
 
-export type ReferralLogEntry = {
-  id: string
-  companyName: string
-  referredTo: string
-  paidReferral: string
-  notes: string
-  ownerName: string
-  dateModified: string
+export const COMPANY_TYPE_LABELS: Record<string, string> = {
+  marketing_retention:         'Marketing & Retention',
+  ecommerce_enablement:        'eCommerce Enablement',
+  data_analytics_ai:           'Data, Analytics & AI',
+  payments_finance:            'Payments & Finance',
+  logistics_fulfillment:       'Logistics & Fulfillment',
+  creative_influencer_services:'Creative & Influencer',
+  individuals_consultations:   'Individuals & Consultants',
 }
+
+// Display order for categories in the picker
+export const COMPANY_TYPE_ORDER = [
+  'marketing_retention',
+  'ecommerce_enablement',
+  'data_analytics_ai',
+  'payments_finance',
+  'logistics_fulfillment',
+  'creative_influencer_services',
+  'individuals_consultations',
+]
 
 export type PartnerFetchResult =
   | { ok: true; partners: PartnerCompany[] }
   | { ok: false; error: string }
-
-// Custom partners object type ID in HubSpot portal 308777
-const PARTNERS_OBJECT_TYPE = '2-17260992'
 
 /** Fetch all Tier 1 partners from the custom partners object, paginating until exhausted. */
 export async function getTier1Partners(): Promise<PartnerFetchResult> {
@@ -52,15 +67,21 @@ export async function getTier1Partners(): Promise<PartnerFetchResult> {
             { propertyName: 'tier', operator: 'EQ' as any, value: 'tier_1' },
           ],
         }],
-        properties: ['partner_name'],
+        properties: ['partner_name', 'company_type', 'service_offered'],
         sorts: ['partner_name'],
         limit: 200,
         after: after ?? '0',
       })
 
       for (const c of res.results ?? []) {
-        const name = (c.properties as Record<string, string | null>).partner_name
-        if (name) partners.push({ id: c.id, name })
+        const p = c.properties as Record<string, string | null>
+        const name = p.partner_name
+        if (name) partners.push({
+          id: c.id,
+          name,
+          companyType: p.company_type ?? null,
+          serviceOffered: p.service_offered ?? null,
+        })
       }
       after = res.paging?.next?.after
     } while (after)
@@ -81,6 +102,17 @@ export async function getTier1Partners(): Promise<PartnerFetchResult> {
   return { ok: true, partners: partners.sort((a, b) => a.name.localeCompare(b.name)) }
 }
 
+// ── Referral log ─────────────────────────────────────────────────────────────
+
+export type ReferralLogEntry = {
+  id: string
+  companyName: string
+  referredTo: string
+  notes: string
+  ownerName: string
+  dateModified: string
+}
+
 /** Fetch recent referrals — companies where referred_to_partner = Yes. Non-throwing. */
 export async function getReferralLog(): Promise<ReferralLogEntry[]> {
   let hs: Client
@@ -93,7 +125,6 @@ export async function getReferralLog(): Promise<ReferralLogEntry[]> {
   const entries: ReferralLogEntry[] = []
   let ownerMap: Record<string, string> = {}
 
-  // Fetch owners for name resolution
   try {
     const ownersRes = await hs.crm.owners.ownersApi.getPage(undefined, undefined, 100)
     for (const o of ownersRes.results ?? []) {
@@ -103,41 +134,107 @@ export async function getReferralLog(): Promise<ReferralLogEntry[]> {
   } catch { /* non-fatal */ }
 
   try {
-  const res = await hs.crm.companies.searchApi.doSearch({
-    filterGroups: [{
-      filters: [
-        { propertyName: 'referred_to_partner', operator: 'EQ' as any, value: 'Yes' },
-      ],
-    }],
-    properties: ['name', 'referred_to', 'paid_partner_referral', 'referral_process', 'hubspot_owner_id', 'hs_lastmodifieddate'],
-    sorts: ['-hs_lastmodifieddate'],
-    limit: 50,
-    after: '0',
-  })
-
-  for (const c of res.results ?? []) {
-    const p = c.properties as Record<string, string | null>
-    entries.push({
-      id: c.id,
-      companyName: p.name ?? '—',
-      referredTo: p.referred_to ?? '—',
-      paidReferral: p.paid_partner_referral === 'Yes' ? 'Paid' : p.paid_partner_referral === 'No' ? 'Non-Paid' : '—',
-      notes: p.referral_process ?? '',
-      ownerName: p.hubspot_owner_id ? (ownerMap[p.hubspot_owner_id] ?? p.hubspot_owner_id) : '—',
-      dateModified: p.hs_lastmodifieddate
-        ? new Date(p.hs_lastmodifieddate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
-        : '—',
+    const res = await hs.crm.companies.searchApi.doSearch({
+      filterGroups: [{
+        filters: [
+          { propertyName: 'referred_to_partner', operator: 'EQ' as any, value: 'Yes' },
+        ],
+      }],
+      properties: ['name', 'referred_to', 'referral_process', 'hubspot_owner_id', 'hs_lastmodifieddate'],
+      sorts: ['-hs_lastmodifieddate'],
+      limit: 50,
+      after: '0',
     })
-  }
+
+    for (const c of res.results ?? []) {
+      const p = c.properties as Record<string, string | null>
+      entries.push({
+        id: c.id,
+        companyName: p.name ?? '—',
+        referredTo: p.referred_to ?? '—',
+        notes: p.referral_process ?? '',
+        ownerName: p.hubspot_owner_id ? (ownerMap[p.hubspot_owner_id] ?? p.hubspot_owner_id) : '—',
+        dateModified: p.hs_lastmodifieddate
+          ? new Date(p.hs_lastmodifieddate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+          : '—',
+      })
+    }
   } catch (err) {
     console.error('[getReferralLog] HubSpot error:', err)
-    // non-fatal — page still renders, log just shows empty
   }
 
   return entries
 }
 
-/** Look up a HubSpot owner ID by email. Returns undefined if not found. */
+// ── Contact / company lookup ──────────────────────────────────────────────────
+
+export type ContactMatch = {
+  id: string
+  firstName: string
+  lastName: string
+  email: string
+  company: string
+}
+
+export type CompanyMatch = {
+  id: string
+  name: string
+  domain: string
+}
+
+/** Look up an existing contact by email. Returns null if not found. */
+export async function lookupContactByEmail(email: string): Promise<ContactMatch | null> {
+  const hs = getHubSpotClient()
+  try {
+    const res = await hs.crm.contacts.searchApi.doSearch({
+      filterGroups: [{
+        filters: [{ propertyName: 'email', operator: 'EQ' as any, value: email.toLowerCase() }],
+      }],
+      properties: ['firstname', 'lastname', 'email', 'company'],
+      limit: 1, after: '0', sorts: [],
+    })
+    if ((res.total ?? 0) === 0) return null
+    const p = res.results[0].properties as Record<string, string | null>
+    return {
+      id: res.results[0].id,
+      firstName: p.firstname ?? '',
+      lastName:  p.lastname  ?? '',
+      email:     p.email     ?? email,
+      company:   p.company   ?? '',
+    }
+  } catch {
+    return null
+  }
+}
+
+/** Look up an existing company by domain or name. Returns null if not found. */
+export async function lookupCompany(query: { domain?: string; name?: string }): Promise<CompanyMatch | null> {
+  if (!query.domain && !query.name) return null
+  const hs = getHubSpotClient()
+  try {
+    const filter = query.domain
+      ? { propertyName: 'domain', operator: 'EQ' as any, value: query.domain.toLowerCase() }
+      : { propertyName: 'name',   operator: 'EQ' as any, value: query.name! }
+
+    const res = await hs.crm.companies.searchApi.doSearch({
+      filterGroups: [{ filters: [filter] }],
+      properties: ['name', 'domain'],
+      limit: 1, after: '0', sorts: [],
+    })
+    if ((res.total ?? 0) === 0) return null
+    const p = res.results[0].properties as Record<string, string | null>
+    return {
+      id:     res.results[0].id,
+      name:   p.name   ?? '',
+      domain: p.domain ?? '',
+    }
+  } catch {
+    return null
+  }
+}
+
+// ── Owner lookup ──────────────────────────────────────────────────────────────
+
 export async function getOwnerIdByEmail(email: string): Promise<string | undefined> {
   const hs = getHubSpotClient()
   try {
@@ -149,84 +246,86 @@ export async function getOwnerIdByEmail(email: string): Promise<string | undefin
   }
 }
 
+// ── Referral write ────────────────────────────────────────────────────────────
+
 export type ReferralPayload = {
   firstName: string
   lastName: string
   email: string
   companyName: string
   companyDomain?: string
-  partnerId: string
-  partnerName: string
-  paidReferral: 'Yes' | 'No'
+  existingContactId?: string
+  existingCompanyId?: string
+  partnerIds: string[]
+  partnerNames: string[]
   notes?: string
   submitterEmail: string
 }
 
-/** Upsert contact + company and set referral properties. Sequential — no Promise.all. */
+/** Upsert contact + company, set referral properties, and associate with selected partners. */
 export async function logReferral(payload: ReferralPayload): Promise<void> {
   const hs = getHubSpotClient()
 
   // 1. Resolve submitter's owner ID
   const ownerId = await getOwnerIdByEmail(payload.submitterEmail)
 
-  // 2. Upsert contact by email
+  // 2. Upsert contact — use existing ID if we already matched it
   let contactId: string
-  const contactSearch = await hs.crm.contacts.searchApi.doSearch({
-    filterGroups: [{
-      filters: [{ propertyName: 'email', operator: 'EQ' as any, value: payload.email }],
-    }],
-    properties: ['email'],
-    limit: 1,
-    after: '0',
-    sorts: [],
-  })
-
   const contactProps: Record<string, string> = {
     firstname: payload.firstName,
-    lastname: payload.lastName,
-    email: payload.email,
-    company: payload.companyName,
+    lastname:  payload.lastName,
+    email:     payload.email,
+    company:   payload.companyName,
     ...(ownerId ? { hubspot_owner_id: ownerId } : {}),
   }
 
-  if (contactSearch.total > 0) {
-    contactId = contactSearch.results[0].id
+  if (payload.existingContactId) {
+    contactId = payload.existingContactId
     await hs.crm.contacts.basicApi.update(contactId, { properties: contactProps })
   } else {
-    const created = await hs.crm.contacts.basicApi.create({ properties: contactProps })
-    contactId = created.id
+    const search = await hs.crm.contacts.searchApi.doSearch({
+      filterGroups: [{ filters: [{ propertyName: 'email', operator: 'EQ' as any, value: payload.email }] }],
+      properties: ['email'], limit: 1, after: '0', sorts: [],
+    })
+    if (search.total > 0) {
+      contactId = search.results[0].id
+      await hs.crm.contacts.basicApi.update(contactId, { properties: contactProps })
+    } else {
+      const created = await hs.crm.contacts.basicApi.create({ properties: contactProps })
+      contactId = created.id
+    }
   }
 
-  // 3. Upsert company — search by domain first, then by name
+  // 3. Upsert company — use existing ID if matched, else search by domain/name
   let companyId: string
-  const domainFilter = payload.companyDomain
-    ? [{ propertyName: 'domain', operator: 'EQ' as any, value: payload.companyDomain }]
-    : [{ propertyName: 'name', operator: 'EQ' as any, value: payload.companyName }]
-
-  const companySearch = await hs.crm.companies.searchApi.doSearch({
-    filterGroups: [{ filters: domainFilter }],
-    properties: ['name'],
-    limit: 1,
-    after: '0',
-    sorts: [],
-  })
-
   const companyProps: Record<string, string> = {
     name: payload.companyName,
     ...(payload.companyDomain ? { domain: payload.companyDomain } : {}),
     referred_to_partner: 'Yes',
-    referred_to: payload.partnerName,
-    paid_partner_referral: payload.paidReferral,
+    referred_to: payload.partnerNames.join(', '),
     ...(payload.notes ? { referral_process: payload.notes } : {}),
     ...(ownerId ? { hubspot_owner_id: ownerId } : {}),
   }
 
-  if (companySearch.total > 0) {
-    companyId = companySearch.results[0].id
+  if (payload.existingCompanyId) {
+    companyId = payload.existingCompanyId
     await hs.crm.companies.basicApi.update(companyId, { properties: companyProps })
   } else {
-    const created = await hs.crm.companies.basicApi.create({ properties: companyProps })
-    companyId = created.id
+    const domainFilter = payload.companyDomain
+      ? [{ propertyName: 'domain', operator: 'EQ' as any, value: payload.companyDomain }]
+      : [{ propertyName: 'name',   operator: 'EQ' as any, value: payload.companyName   }]
+
+    const search = await hs.crm.companies.searchApi.doSearch({
+      filterGroups: [{ filters: domainFilter }],
+      properties: ['name'], limit: 1, after: '0', sorts: [],
+    })
+    if (search.total > 0) {
+      companyId = search.results[0].id
+      await hs.crm.companies.basicApi.update(companyId, { properties: companyProps })
+    } else {
+      const created = await hs.crm.companies.basicApi.create({ properties: companyProps })
+      companyId = created.id
+    }
   }
 
   // 4. Associate contact → company
@@ -236,14 +335,16 @@ export async function logReferral(payload: ReferralPayload): Promise<void> {
       'companies', companyId,
       [{ associationCategory: 'HUBSPOT_DEFINED' as any, associationTypeId: 279 }],
     )
-  } catch { /* non-fatal if association already exists */ }
+  } catch { /* non-fatal */ }
 
-  // 5. Associate lead company → custom partner object record
-  try {
-    await hs.crm.associations.v4.basicApi.create(
-      'companies', companyId,
-      PARTNERS_OBJECT_TYPE, payload.partnerId,
-      [{ associationCategory: 'USER_DEFINED' as any, associationTypeId: 1 }],
-    )
-  } catch { /* non-fatal — association type IDs may need adjustment per portal */ }
+  // 5. Associate lead company → each selected partner object record (sequential)
+  for (const partnerId of payload.partnerIds) {
+    try {
+      await hs.crm.associations.v4.basicApi.create(
+        'companies', companyId,
+        PARTNERS_OBJECT_TYPE, partnerId,
+        [{ associationCategory: 'USER_DEFINED' as any, associationTypeId: 1 }],
+      )
+    } catch { /* non-fatal */ }
+  }
 }

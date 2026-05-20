@@ -18,11 +18,19 @@ export async function POST(req: NextRequest) {
   const {
     firstName, lastName, email,
     companyName, companyDomain,
-    partnerId, partnerName,
-    paidReferral, notes,
-  } = body as Record<string, string>
+    partnerIds, partnerNames,
+    existingContactId, existingCompanyId,
+    notes,
+  } = body as Record<string, unknown>
 
-  if (!firstName || !lastName || !email || !companyName || !partnerId || !partnerName || !paidReferral) {
+  if (
+    typeof firstName !== 'string' || !firstName ||
+    typeof lastName  !== 'string' || !lastName  ||
+    typeof email     !== 'string' || !email     ||
+    typeof companyName !== 'string' || !companyName ||
+    !Array.isArray(partnerIds)  || partnerIds.length  === 0 ||
+    !Array.isArray(partnerNames) || partnerNames.length === 0
+  ) {
     return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
   }
 
@@ -32,11 +40,12 @@ export async function POST(req: NextRequest) {
       lastName,
       email,
       companyName,
-      companyDomain: companyDomain || undefined,
-      partnerId,
-      partnerName,
-      paidReferral: paidReferral as 'Yes' | 'No',
-      notes: notes || undefined,
+      companyDomain:     typeof companyDomain     === 'string' ? companyDomain     : undefined,
+      existingContactId: typeof existingContactId === 'string' ? existingContactId : undefined,
+      existingCompanyId: typeof existingCompanyId === 'string' ? existingCompanyId : undefined,
+      partnerIds:   partnerIds  as string[],
+      partnerNames: partnerNames as string[],
+      notes: typeof notes === 'string' ? notes : undefined,
       submitterEmail: session.user.email,
     })
     return NextResponse.json({ ok: true })

@@ -1,19 +1,19 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useState, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { CheckCircle, Loader2, AlertCircle } from 'lucide-react'
-
-type Partner = { id: string; name: string }
+import { CheckCircle, Loader2, AlertCircle, UserCheck, Building2 } from 'lucide-react'
+import { PartnerPicker } from '@/components/partner-picker'
+import type { PickerPartner } from '@/components/partner-picker'
+import type { ContactMatch, CompanyMatch } from '@/lib/hubspot/client'
 
 type Props = {
-  partners: Partner[]
+  partners: PickerPartner[]
   partnerError?: string
   submitterName: string
 }
@@ -24,8 +24,6 @@ type FormState = {
   email: string
   companyName: string
   companyDomain: string
-  partnerId: string
-  paidReferral: string
   notes: string
 }
 
@@ -35,38 +33,94 @@ const EMPTY: FormState = {
   email: '',
   companyName: '',
   companyDomain: '',
-  partnerId: '',
-  paidReferral: '',
   notes: '',
 }
 
 export function ReferralForm({ partners, partnerError, submitterName }: Props) {
   const router = useRouter()
   const [form, setForm] = useState<FormState>(EMPTY)
-  const [partnerSearch, setPartnerSearch] = useState('')
+  const [selectedPartnerIds, setSelectedPartnerIds] = useState<string[]>([])
   const [status, setStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle')
   const [errorMsg, setErrorMsg] = useState('')
+
+  // Live HubSpot match state
+  const [matchedContact, setMatchedContact] = useState<ContactMatch | null>(null)
+  const [matchedCompany, setMatchedCompany] = useState<CompanyMatch | null>(null)
+  const [lookingUpContact, setLookingUpContact] = useState(false)
+  const [lookingUpCompany, setLookingUpCompany] = useState(false)
+
+  // Debounce refs
+  const contactTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const companyTimer  = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const set = (field: keyof FormState) => (
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
   ) => setForm((f) => ({ ...f, [field]: e.target.value }))
 
-  const filteredPartners = useMemo(() => {
-    const q = partnerSearch.toLowerCase().trim()
-    if (!q) return partners
-    return partners.filter((p) => p.name.toLowerCase().includes(q))
-  }, [partners, partnerSearch])
+  // ── Live contact lookup ──────────────────────────────────────────────────────
+  const lookupContact = useCallback((email: string) => {
+    if (contactTimer.current) clearTimeout(contactTimer.current)
+    if (!email.includes('@')) { setMatchedContact(null); return }
 
-  const selectedPartner = partners.find((p) => p.id === form.partnerId)
+    contactTimer.current = setTimeout(async () => {
+      setLookingUpContact(true)
+      try {
+        const res = await fetch(`/api/lookup?email=${encodeURIComponent(email)}`)
+        const data = await res.json() as { contact: ContactMatch | null }
+        if (data.contact) {
+          setMatchedContact(data.contact)
+          setForm((f) => ({
+            ...f,
+            firstName:   f.firstName   || data.contact!.firstName,
+            lastName:    f.lastName    || data.contact!.lastName,
+            companyName: f.companyName || data.contact!.company,
+          }))
+        } else {
+          setMatchedContact(null)
+        }
+      } catch { setMatchedContact(null) }
+      finally  { setLookingUpContact(false) }
+    }, 600)
+  }, [])
 
+  // ── Live company lookup ──────────────────────────────────────────────────────
+  const lookupCompany = useCallback((domain: string, name: string) => {
+    if (companyTimer.current) clearTimeout(companyTimer.current)
+    const query = domain.trim() || name.trim()
+    if (!query) { setMatchedCompany(null); return }
+
+    companyTimer.current = setTimeout(async () => {
+      setLookingUpCompany(true)
+      try {
+        const params = domain.trim()
+          ? `domain=${encodeURIComponent(domain.trim())}`
+          : `name=${encodeURIComponent(name.trim())}`
+        const res  = await fetch(`/api/lookup?${params}`)
+        const data = await res.json() as { company: CompanyMatch | null }
+        if (data.company) {
+          setMatchedCompany(data.company)
+          setForm((f) => ({
+            ...f,
+            companyName:   f.companyName   || data.company!.name,
+            companyDomain: f.companyDomain || data.company!.domain,
+          }))
+        } else {
+          setMatchedCompany(null)
+        }
+      } catch { setMatchedCompany(null) }
+      finally  { setLookingUpCompany(false) }
+    }, 600)
+  }, [])
+
+  // ── Submit ───────────────────────────────────────────────────────────────────
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    if (!form.partnerId || !form.paidReferral) return
+    if (selectedPartnerIds.length === 0) return
 
     setStatus('loading')
     setErrorMsg('')
 
-    const partner = partners.find((p) => p.id === form.partnerId)
+    const selectedPartners = partners.filter((p) => selectedPartnerIds.includes(p.id))
 
     try {
       const res = await fetch('/api/referrals', {
@@ -74,18 +128,23 @@ export function ReferralForm({ partners, partnerError, submitterName }: Props) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ...form,
-          partnerName: partner?.name ?? '',
+          partnerIds:   selectedPartnerIds,
+          partnerNames: selectedPartners.map((p) => p.name),
+          existingContactId: matchedContact?.id,
+          existingCompanyId: matchedCompany?.id,
         }),
       })
 
       if (!res.ok) {
-        const data = await res.json().catch(() => ({}))
+        const data = await res.json().catch(() => ({})) as Record<string, string>
         throw new Error(data.error ?? 'Something went wrong')
       }
 
       setStatus('success')
       setForm(EMPTY)
-      setPartnerSearch('')
+      setSelectedPartnerIds([])
+      setMatchedContact(null)
+      setMatchedCompany(null)
       router.refresh()
     } catch (err) {
       setStatus('error')
@@ -101,6 +160,7 @@ export function ReferralForm({ partners, partnerError, submitterName }: Props) {
           Submitting as <span className="text-white font-medium">{submitterName}</span>
         </CardDescription>
       </CardHeader>
+
       {partnerError && (
         <div className="mx-6 mb-2 flex items-start gap-2 rounded-lg border border-[#FF4444]/30 bg-[#FF4444]/8 px-4 py-3 text-sm text-[#FF4444]">
           <AlertCircle className="size-4 shrink-0 mt-0.5" />
@@ -110,14 +170,49 @@ export function ReferralForm({ partners, partnerError, submitterName }: Props) {
           </div>
         </div>
       )}
+
       <CardContent>
         <form onSubmit={handleSubmit} className="space-y-6">
-          {/* Lead info */}
+
+          {/* ── Lead Info ──────────────────────────────────────────────────── */}
           <div className="space-y-3">
             <p className="text-xs font-bold tracking-[0.15em] uppercase text-[#8A8A8A]">Lead Info</p>
+
+            {/* Email first — drives the live lookup */}
+            <div className="space-y-1.5">
+              <Label htmlFor="email" className="text-white text-sm">
+                Email <span className="text-[#FF4444]">*</span>
+              </Label>
+              <div className="relative">
+                <Input
+                  id="email"
+                  type="email"
+                  value={form.email}
+                  onChange={(e) => {
+                    set('email')(e)
+                    lookupContact(e.target.value)
+                  }}
+                  required
+                  placeholder="jane@company.com"
+                  className="bg-[#1a1a1a] border-white/8 text-white placeholder:text-[#8A8A8A] focus-visible:ring-[#60FDFF] pr-8"
+                />
+                {lookingUpContact && (
+                  <Loader2 className="size-3.5 absolute right-2.5 top-1/2 -translate-y-1/2 text-[#8A8A8A] animate-spin" />
+                )}
+              </div>
+              {matchedContact && (
+                <p className="flex items-center gap-1.5 text-xs text-[#60FDFF]">
+                  <UserCheck className="size-3.5 shrink-0" />
+                  Matched existing contact: {matchedContact.firstName} {matchedContact.lastName}
+                </p>
+              )}
+            </div>
+
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
-                <Label htmlFor="firstName" className="text-white text-sm">First Name <span className="text-[#FF4444]">*</span></Label>
+                <Label htmlFor="firstName" className="text-white text-sm">
+                  First Name <span className="text-[#FF4444]">*</span>
+                </Label>
                 <Input
                   id="firstName"
                   value={form.firstName}
@@ -128,7 +223,9 @@ export function ReferralForm({ partners, partnerError, submitterName }: Props) {
                 />
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="lastName" className="text-white text-sm">Last Name <span className="text-[#FF4444]">*</span></Label>
+                <Label htmlFor="lastName" className="text-white text-sm">
+                  Last Name <span className="text-[#FF4444]">*</span>
+                </Label>
                 <Input
                   id="lastName"
                   value={form.lastName}
@@ -139,122 +236,81 @@ export function ReferralForm({ partners, partnerError, submitterName }: Props) {
                 />
               </div>
             </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="email" className="text-white text-sm">Email <span className="text-[#FF4444]">*</span></Label>
-              <Input
-                id="email"
-                type="email"
-                value={form.email}
-                onChange={set('email')}
-                required
-                placeholder="jane@company.com"
-                className="bg-[#1a1a1a] border-white/8 text-white placeholder:text-[#8A8A8A] focus-visible:ring-[#60FDFF]"
-              />
-            </div>
+
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
-                <Label htmlFor="companyName" className="text-white text-sm">Company <span className="text-[#FF4444]">*</span></Label>
-                <Input
-                  id="companyName"
-                  value={form.companyName}
-                  onChange={set('companyName')}
-                  required
-                  placeholder="Acme Corp"
-                  className="bg-[#1a1a1a] border-white/8 text-white placeholder:text-[#8A8A8A] focus-visible:ring-[#60FDFF]"
-                />
+                <Label htmlFor="companyName" className="text-white text-sm">
+                  Company <span className="text-[#FF4444]">*</span>
+                </Label>
+                <div className="relative">
+                  <Input
+                    id="companyName"
+                    value={form.companyName}
+                    onChange={(e) => {
+                      set('companyName')(e)
+                      lookupCompany(form.companyDomain, e.target.value)
+                    }}
+                    required
+                    placeholder="Acme Corp"
+                    className="bg-[#1a1a1a] border-white/8 text-white placeholder:text-[#8A8A8A] focus-visible:ring-[#60FDFF]"
+                  />
+                </div>
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="companyDomain" className="text-white text-sm">Website</Label>
-                <Input
-                  id="companyDomain"
-                  value={form.companyDomain}
-                  onChange={set('companyDomain')}
-                  placeholder="acme.com"
-                  className="bg-[#1a1a1a] border-white/8 text-white placeholder:text-[#8A8A8A] focus-visible:ring-[#60FDFF]"
-                />
+                <div className="relative">
+                  <Input
+                    id="companyDomain"
+                    value={form.companyDomain}
+                    onChange={(e) => {
+                      set('companyDomain')(e)
+                      lookupCompany(e.target.value, form.companyName)
+                    }}
+                    placeholder="acme.com"
+                    className="bg-[#1a1a1a] border-white/8 text-white placeholder:text-[#8A8A8A] focus-visible:ring-[#60FDFF] pr-8"
+                  />
+                  {lookingUpCompany && (
+                    <Loader2 className="size-3.5 absolute right-2.5 top-1/2 -translate-y-1/2 text-[#8A8A8A] animate-spin" />
+                  )}
+                </div>
               </div>
             </div>
+
+            {matchedCompany && (
+              <p className="flex items-center gap-1.5 text-xs text-[#60FDFF]">
+                <Building2 className="size-3.5 shrink-0" />
+                Matched existing company: {matchedCompany.name}
+                {matchedCompany.domain ? ` (${matchedCompany.domain})` : ''}
+              </p>
+            )}
           </div>
 
-          {/* Referral details */}
+          {/* ── Partner Selection ───────────────────────────────────────────── */}
           <div className="space-y-3">
-            <p className="text-xs font-bold tracking-[0.15em] uppercase text-[#8A8A8A]">Referral Details</p>
-
-            {/* Partner search + select */}
-            <div className="space-y-1.5">
-              <Label className="text-white text-sm">Referred to Partner <span className="text-[#FF4444]">*</span></Label>
-              <Input
-                value={partnerSearch}
-                onChange={(e) => {
-                  setPartnerSearch(e.target.value)
-                  setForm((f) => ({ ...f, partnerId: '' }))
-                }}
-                placeholder="Search partners..."
-                className="bg-[#1a1a1a] border-white/8 text-white placeholder:text-[#8A8A8A] focus-visible:ring-[#60FDFF] mb-1.5"
-              />
-              <Select
-                value={form.partnerId}
-                onValueChange={(v) => {
-                  setForm((f) => ({ ...f, partnerId: v ?? '' }))
-                  const p = partners.find((x) => x.id === v)
-                  if (p) setPartnerSearch(p.name)
-                }}
-                required
-              >
-                <SelectTrigger className="bg-[#1a1a1a] border-white/8 text-white focus:ring-[#60FDFF]">
-                  <SelectValue placeholder={
-                    selectedPartner
-                      ? selectedPartner.name
-                      : filteredPartners.length === 0
-                        ? 'No matching partners'
-                        : 'Select a partner'
-                  } />
-                </SelectTrigger>
-                <SelectContent className="bg-[#272727] border-white/8 text-white max-h-64">
-                  {filteredPartners.map((p) => (
-                    <SelectItem
-                      key={p.id}
-                      value={p.id}
-                      className="text-white focus:bg-[#1a1a1a] focus:text-white"
-                    >
-                      {p.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-1.5">
-              <Label className="text-white text-sm">Referral Type <span className="text-[#FF4444]">*</span></Label>
-              <Select
-                value={form.paidReferral}
-                onValueChange={(v) => setForm((f) => ({ ...f, paidReferral: v ?? '' }))}
-                required
-              >
-                <SelectTrigger className="bg-[#1a1a1a] border-white/8 text-white focus:ring-[#60FDFF]">
-                  <SelectValue placeholder="Select type" />
-                </SelectTrigger>
-                <SelectContent className="bg-[#272727] border-white/8 text-white">
-                  <SelectItem value="Yes" className="text-white focus:bg-[#1a1a1a] focus:text-white">Paid Referral</SelectItem>
-                  <SelectItem value="No" className="text-white focus:bg-[#1a1a1a] focus:text-white">Non-Paid Referral</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-1.5">
-              <Label htmlFor="notes" className="text-white text-sm">Notes</Label>
-              <Textarea
-                id="notes"
-                value={form.notes}
-                onChange={set('notes')}
-                placeholder="Context about this lead or referral..."
-                rows={3}
-                className="bg-[#1a1a1a] border-white/8 text-white placeholder:text-[#8A8A8A] focus-visible:ring-[#60FDFF] resize-none"
-              />
-            </div>
+            <p className="text-xs font-bold tracking-[0.15em] uppercase text-[#8A8A8A]">
+              Refer to Partner <span className="text-[#FF4444]">*</span>
+            </p>
+            <PartnerPicker
+              partners={partners}
+              selected={selectedPartnerIds}
+              onChange={setSelectedPartnerIds}
+            />
           </div>
 
-          {/* Status feedback */}
+          {/* ── Notes ──────────────────────────────────────────────────────── */}
+          <div className="space-y-1.5">
+            <Label htmlFor="notes" className="text-white text-sm">Notes</Label>
+            <Textarea
+              id="notes"
+              value={form.notes}
+              onChange={set('notes')}
+              placeholder="Context about this lead or referral…"
+              rows={3}
+              className="bg-[#1a1a1a] border-white/8 text-white placeholder:text-[#8A8A8A] focus-visible:ring-[#60FDFF] resize-none"
+            />
+          </div>
+
+          {/* ── Status feedback ─────────────────────────────────────────────── */}
           {status === 'success' && (
             <div className="flex items-center gap-2 text-[#60FF80] text-sm">
               <CheckCircle className="size-4 shrink-0" />
@@ -270,7 +326,7 @@ export function ReferralForm({ partners, partnerError, submitterName }: Props) {
 
           <Button
             type="submit"
-            disabled={status === 'loading' || !form.partnerId || !form.paidReferral}
+            disabled={status === 'loading' || selectedPartnerIds.length === 0}
             className="w-full bg-[#60FDFF] text-black font-bold hover:bg-[#60FDFF]/90 disabled:opacity-40"
           >
             {status === 'loading' ? (

@@ -60,7 +60,11 @@ export default async function ReferralsPage() {
         </div>
 
         <ReferralForm
-          partners={partnerResult.ok ? partnerResult.partners : []}
+          partners={partnerResult.ok ? partnerResult.partners.map((p) => ({
+            id: p.id,
+            name: p.name,
+            companyType: p.companyType,
+          })) : []}
           partnerError={partnerResult.ok ? undefined : partnerResult.error}
           submitterName={userName}
         />
