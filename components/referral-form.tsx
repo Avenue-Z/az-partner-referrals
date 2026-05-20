@@ -289,11 +289,9 @@ export function ReferralForm({ partners, partnerError, submitterName }: Props) {
 
   return (
     <Card className="bg-[#272727] border-white/8">
-      <CardHeader>
-        <CardTitle className="text-white text-xl">Log a Referral</CardTitle>
-        <CardDescription className="text-[#8A8A8A]">
-          Submitting as <span className="text-white font-medium">{submitterName}</span>
-        </CardDescription>
+      <CardHeader className="sr-only">
+        <CardTitle>Log a Referral</CardTitle>
+        <CardDescription>Submitting as {submitterName}</CardDescription>
       </CardHeader>
 
       {partnerError && (
@@ -311,7 +309,7 @@ export function ReferralForm({ partners, partnerError, submitterName }: Props) {
 
           {/* ── Lead Info ──────────────────────────────────────────────────── */}
           <div className="space-y-3">
-            <p className="text-xs font-bold tracking-[0.15em] uppercase text-[#8A8A8A]">Lead Info</p>
+            <p className="text-xs font-bold tracking-[0.15em] uppercase text-[#8A8A8A]">Search for Contact</p>
 
             {/* Email — always visible, drives everything */}
             <div className="space-y-1.5">
@@ -467,7 +465,7 @@ export function ReferralForm({ partners, partnerError, submitterName }: Props) {
           {(contactKnown || needsName) && (
             <div className="space-y-3">
               <p className="text-xs font-bold tracking-[0.15em] uppercase text-[#8A8A8A]">
-                Refer to Partner <span className="text-[#FF4444]">*</span>
+                Select Partners to Attribute <span className="text-[#FF4444]">*</span>
               </p>
               <PartnerPicker
                 partners={partners}

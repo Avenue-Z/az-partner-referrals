@@ -54,9 +54,24 @@ export default async function ReferralsPage() {
       <main className="max-w-5xl mx-auto px-6 py-8 space-y-8">
         <div>
           <h1 className="text-2xl font-bold text-white">Log a Partner Referral</h1>
-          <p className="text-[#8A8A8A] mt-1 text-sm">
-            Refer a lead to a Tier 1 partner and log it directly in HubSpot.
-          </p>
+          <ul className="mt-3 space-y-1.5 text-sm text-[#8A8A8A]">
+            <li className="flex items-start gap-2">
+              <span className="mt-1.5 size-1 shrink-0 rounded-full bg-[#8A8A8A]" />
+              Use the form below to attribute a contact to a Partner record in HubSpot.
+            </li>
+            <li className="flex items-start gap-2">
+              <span className="mt-1.5 size-1 shrink-0 rounded-full bg-[#8A8A8A]" />
+              This will log the Contact record to the Partner object for tracking.
+            </li>
+            <li className="flex items-start gap-2">
+              <span className="mt-1.5 size-1 shrink-0 rounded-full bg-[#8A8A8A]" />
+              You will still need to submit the Partner&apos;s referral form or reach out to them directly.
+            </li>
+            <li className="flex items-start gap-2">
+              <span className="mt-1.5 size-1 shrink-0 rounded-full bg-[#8A8A8A]" />
+              All stakeholders will receive an email notification upon submission.
+            </li>
+          </ul>
         </div>
 
         <ReferralForm
