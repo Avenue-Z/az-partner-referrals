@@ -2,7 +2,14 @@ import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/auth'
 import { lookupContactByEmail, lookupCompany } from '@/lib/hubspot/client'
 
-/** GET /api/lookup?email=... OR ?domain=...&name=... */
+/**
+ * GET /api/lookup?email=...
+ *   → { contact: ContactMatch | null, company: CompanyMatch | null }
+ *     (company is the contact's primary associated company, if any)
+ *
+ * GET /api/lookup?domain=... or ?name=...
+ *   → { company: CompanyMatch | null }
+ */
 export async function GET(req: NextRequest) {
   const session = await auth()
   if (!session?.user?.email) {
@@ -15,8 +22,8 @@ export async function GET(req: NextRequest) {
   const name   = searchParams.get('name')   ?? ''
 
   if (email) {
-    const contact = await lookupContactByEmail(email)
-    return NextResponse.json({ contact })
+    const result = await lookupContactByEmail(email)
+    return NextResponse.json(result)
   }
 
   if (domain || name) {

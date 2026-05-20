@@ -173,37 +173,110 @@ export type ContactMatch = {
   firstName: string
   lastName: string
   email: string
-  company: string
+  ownerId: string | null
+  ownerName: string | null
+  associatedCompanyId: string | null
 }
 
 export type CompanyMatch = {
   id: string
   name: string
   domain: string
+  ownerId: string | null
+  ownerName: string | null
 }
 
-/** Look up an existing contact by email. Returns null if not found. */
-export async function lookupContactByEmail(email: string): Promise<ContactMatch | null> {
+export type ContactLookupResult = {
+  contact: ContactMatch | null
+  company: CompanyMatch | null
+}
+
+// ── Internal helpers ──────────────────────────────────────────────────────────
+
+async function resolveOwnerName(hs: Client, ownerId: string | null): Promise<string | null> {
+  if (!ownerId) return null
+  try {
+    const o = await hs.crm.owners.ownersApi.getById(parseInt(ownerId, 10))
+    return [o.firstName, o.lastName].filter(Boolean).join(' ') || o.email || ownerId
+  } catch {
+    return null
+  }
+}
+
+/** Fetch a single company by its HubSpot record ID, including owner info. */
+export async function lookupCompanyById(companyId: string): Promise<CompanyMatch | null> {
   const hs = getHubSpotClient()
   try {
-    const res = await hs.crm.contacts.searchApi.doSearch({
-      filterGroups: [{
-        filters: [{ propertyName: 'email', operator: 'EQ' as any, value: email.toLowerCase() }],
-      }],
-      properties: ['firstname', 'lastname', 'email', 'company'],
-      limit: 1, after: '0', sorts: [],
-    })
-    if ((res.total ?? 0) === 0) return null
-    const p = res.results[0].properties as Record<string, string | null>
+    const c = await hs.crm.companies.basicApi.getById(
+      companyId,
+      ['name', 'domain', 'hubspot_owner_id'],
+    )
+    const p = c.properties as Record<string, string | null>
+    const ownerId = p.hubspot_owner_id ?? null
     return {
-      id: res.results[0].id,
-      firstName: p.firstname ?? '',
-      lastName:  p.lastname  ?? '',
-      email:     p.email     ?? email,
-      company:   p.company   ?? '',
+      id:        c.id,
+      name:      p.name   ?? '',
+      domain:    p.domain ?? '',
+      ownerId,
+      ownerName: await resolveOwnerName(hs, ownerId),
     }
   } catch {
     return null
+  }
+}
+
+/**
+ * Look up a contact by email.
+ * Also resolves their primary associated company (if any).
+ * Returns { contact, company } — either can be null.
+ */
+export async function lookupContactByEmail(email: string): Promise<ContactLookupResult> {
+  const hs = getHubSpotClient()
+  try {
+    // Step 1: find by email to get the record ID
+    const search = await hs.crm.contacts.searchApi.doSearch({
+      filterGroups: [{
+        filters: [{ propertyName: 'email', operator: 'EQ' as any, value: email.toLowerCase() }],
+      }],
+      properties: ['email'],
+      limit: 1, after: '0', sorts: [],
+    })
+    if ((search.total ?? 0) === 0) return { contact: null, company: null }
+
+    // Step 2: fetch full record with properties + company associations in one call
+    const c = await hs.crm.contacts.basicApi.getById(
+      search.results[0].id,
+      ['firstname', 'lastname', 'email', 'hubspot_owner_id'],
+      undefined,
+      ['companies'],
+    )
+
+    const p      = c.properties as Record<string, string | null>
+    const ownerId = p.hubspot_owner_id ?? null
+
+    // Extract first associated company ID from the associations block
+    const assocResults = (c.associations as any)?.companies?.results as Array<{ id: string }> | undefined
+    const associatedCompanyId = assocResults?.[0]?.id ?? null
+
+    let company: CompanyMatch | null = null
+    if (associatedCompanyId) {
+      company = await lookupCompanyById(associatedCompanyId)
+    }
+
+    return {
+      contact: {
+        id:                  c.id,
+        firstName:           p.firstname ?? '',
+        lastName:            p.lastname  ?? '',
+        email:               p.email     ?? email,
+        ownerId,
+        ownerName:           await resolveOwnerName(hs, ownerId),
+        associatedCompanyId,
+      },
+      company,
+    }
+  } catch {
+    return { contact: null, company: null }
   }
 }
 
@@ -218,15 +291,20 @@ export async function lookupCompany(query: { domain?: string; name?: string }): 
 
     const res = await hs.crm.companies.searchApi.doSearch({
       filterGroups: [{ filters: [filter] }],
-      properties: ['name', 'domain'],
+      properties: ['name', 'domain', 'hubspot_owner_id'],
       limit: 1, after: '0', sorts: [],
     })
     if ((res.total ?? 0) === 0) return null
-    const p = res.results[0].properties as Record<string, string | null>
+
+    const c  = res.results[0]
+    const p  = c.properties as Record<string, string | null>
+    const ownerId = p.hubspot_owner_id ?? null
     return {
-      id:     res.results[0].id,
-      name:   p.name   ?? '',
-      domain: p.domain ?? '',
+      id:        c.id,
+      name:      p.name   ?? '',
+      domain:    p.domain ?? '',
+      ownerId,
+      ownerName: await resolveOwnerName(hs, ownerId),
     }
   } catch {
     return null

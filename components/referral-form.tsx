@@ -7,10 +7,13 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
-import { CheckCircle, Loader2, AlertCircle, UserCheck, Building2 } from 'lucide-react'
+import {
+  CheckCircle, Loader2, AlertCircle,
+  UserCheck, Building2, UserPlus, PlusCircle,
+} from 'lucide-react'
 import { PartnerPicker } from '@/components/partner-picker'
 import type { PickerPartner } from '@/components/partner-picker'
-import type { ContactMatch, CompanyMatch } from '@/lib/hubspot/client'
+import type { ContactMatch, CompanyMatch, ContactLookupResult } from '@/lib/hubspot/client'
 
 type Props = {
   partners: PickerPartner[]
@@ -18,107 +21,148 @@ type Props = {
   submitterName: string
 }
 
-type FormState = {
-  firstName: string
-  lastName: string
-  email: string
-  companyName: string
-  companyDomain: string
-  notes: string
-}
-
-const EMPTY: FormState = {
-  firstName: '',
-  lastName: '',
-  email: '',
-  companyName: '',
-  companyDomain: '',
-  notes: '',
-}
+type EmailState  = 'idle' | 'loading' | 'found' | 'not-found'
+type CompanyState = 'idle' | 'loading' | 'found' | 'not-found'
 
 export function ReferralForm({ partners, partnerError, submitterName }: Props) {
   const router = useRouter()
-  const [form, setForm] = useState<FormState>(EMPTY)
-  const [selectedPartnerIds, setSelectedPartnerIds] = useState<string[]>([])
-  const [status, setStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle')
-  const [errorMsg, setErrorMsg] = useState('')
 
-  // Live HubSpot match state
+  // ── Core form fields ─────────────────────────────────────────────────────────
+  const [email,         setEmail]         = useState('')
+  const [firstName,     setFirstName]     = useState('')
+  const [lastName,      setLastName]      = useState('')
+  const [companyName,   setCompanyName]   = useState('')
+  const [companyDomain, setCompanyDomain] = useState('')
+  const [notes,         setNotes]         = useState('')
+
+  // ── Lookup state ─────────────────────────────────────────────────────────────
+  const [emailState,    setEmailState]    = useState<EmailState>('idle')
+  const [companyState,  setCompanyState]  = useState<CompanyState>('idle')
   const [matchedContact, setMatchedContact] = useState<ContactMatch | null>(null)
   const [matchedCompany, setMatchedCompany] = useState<CompanyMatch | null>(null)
-  const [lookingUpContact, setLookingUpContact] = useState(false)
-  const [lookingUpCompany, setLookingUpCompany] = useState(false)
 
-  // Debounce refs
-  const contactTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const companyTimer  = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // ── Partner selection ─────────────────────────────────────────────────────────
+  const [selectedPartnerIds, setSelectedPartnerIds] = useState<string[]>([])
 
-  const set = (field: keyof FormState) => (
-    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
-  ) => setForm((f) => ({ ...f, [field]: e.target.value }))
+  // ── Submit state ──────────────────────────────────────────────────────────────
+  const [submitState, setSubmitState] = useState<'idle' | 'loading' | 'success' | 'error'>('idle')
+  const [errorMsg,    setErrorMsg]    = useState('')
 
-  // ── Live contact lookup ──────────────────────────────────────────────────────
-  const lookupContact = useCallback((email: string) => {
-    if (contactTimer.current) clearTimeout(contactTimer.current)
-    if (!email.includes('@')) { setMatchedContact(null); return }
+  // ── Debounce timers ───────────────────────────────────────────────────────────
+  const emailTimer   = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const companyTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-    contactTimer.current = setTimeout(async () => {
-      setLookingUpContact(true)
+  // ── Email lookup ──────────────────────────────────────────────────────────────
+  const triggerEmailLookup = useCallback((val: string) => {
+    if (emailTimer.current) clearTimeout(emailTimer.current)
+
+    // Reset downstream state whenever email changes
+    setEmailState('idle')
+    setMatchedContact(null)
+    setMatchedCompany(null)
+    setCompanyState('idle')
+    setFirstName('')
+    setLastName('')
+    setCompanyName('')
+    setCompanyDomain('')
+
+    if (!val.includes('@') || !val.includes('.')) return
+
+    emailTimer.current = setTimeout(async () => {
+      setEmailState('loading')
       try {
-        const res = await fetch(`/api/lookup?email=${encodeURIComponent(email)}`)
-        const data = await res.json() as { contact: ContactMatch | null }
+        const res  = await fetch(`/api/lookup?email=${encodeURIComponent(val)}`)
+        const data = await res.json() as ContactLookupResult
+
         if (data.contact) {
           setMatchedContact(data.contact)
-          setForm((f) => ({
-            ...f,
-            firstName:   f.firstName   || data.contact!.firstName,
-            lastName:    f.lastName    || data.contact!.lastName,
-            companyName: f.companyName || data.contact!.company,
-          }))
+          setEmailState('found')
+
+          if (data.company) {
+            setMatchedCompany(data.company)
+            setCompanyState('found')
+            setCompanyName(data.company.name)
+            setCompanyDomain(data.company.domain)
+          } else {
+            setCompanyState('not-found')
+          }
         } else {
-          setMatchedContact(null)
+          setEmailState('not-found')
+          setCompanyState('idle')
         }
-      } catch { setMatchedContact(null) }
-      finally  { setLookingUpContact(false) }
+      } catch {
+        setEmailState('not-found')
+      }
     }, 600)
   }, [])
 
-  // ── Live company lookup ──────────────────────────────────────────────────────
-  const lookupCompany = useCallback((domain: string, name: string) => {
+  // ── Company lookup (manual fields) ───────────────────────────────────────────
+  const triggerCompanyLookup = useCallback((domain: string, name: string) => {
     if (companyTimer.current) clearTimeout(companyTimer.current)
     const query = domain.trim() || name.trim()
-    if (!query) { setMatchedCompany(null); return }
+    if (!query) { setCompanyState('idle'); setMatchedCompany(null); return }
 
     companyTimer.current = setTimeout(async () => {
-      setLookingUpCompany(true)
+      setCompanyState('loading')
       try {
         const params = domain.trim()
           ? `domain=${encodeURIComponent(domain.trim())}`
           : `name=${encodeURIComponent(name.trim())}`
         const res  = await fetch(`/api/lookup?${params}`)
         const data = await res.json() as { company: CompanyMatch | null }
+
         if (data.company) {
           setMatchedCompany(data.company)
-          setForm((f) => ({
-            ...f,
-            companyName:   f.companyName   || data.company!.name,
-            companyDomain: f.companyDomain || data.company!.domain,
-          }))
+          setCompanyState('found')
+          setCompanyName((prev) => prev || data.company!.name)
+          setCompanyDomain((prev) => prev || data.company!.domain)
         } else {
           setMatchedCompany(null)
+          setCompanyState('not-found')
         }
-      } catch { setMatchedCompany(null) }
-      finally  { setLookingUpCompany(false) }
+      } catch {
+        setMatchedCompany(null)
+        setCompanyState('not-found')
+      }
     }, 600)
   }, [])
 
-  // ── Submit ───────────────────────────────────────────────────────────────────
+  // ── Derived flags ─────────────────────────────────────────────────────────────
+  // Do we have everything we need without the user typing more?
+  const contactKnown  = emailState === 'found'
+  const companyKnown  = companyState === 'found'
+  const needsName     = emailState === 'not-found'
+  const needsCompany  = emailState === 'not-found' || (contactKnown && companyState !== 'found' && companyState !== 'loading')
+
+  // Whether to show company fields (when contact exists but has no company, or contact doesn't exist)
+  const showCompanyFields = (contactKnown && companyState !== 'found') || emailState === 'not-found'
+
+  // Scenario badges shown on the company match card
+  const companySituation = (): string | null => {
+    if (!contactKnown || !companyKnown) return null
+    return null // both matched — no extra note needed in normal flow
+  }
+
+  // Can submit
+  const canSubmit =
+    email.includes('@') &&
+    emailState !== 'loading' &&
+    (contactKnown || (firstName.trim() && lastName.trim())) &&
+    (companyKnown || (companyName.trim())) &&
+    selectedPartnerIds.length > 0
+
+  // ── Submit ────────────────────────────────────────────────────────────────────
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    if (selectedPartnerIds.length === 0) return
+    if (!canSubmit) return
 
-    setStatus('loading')
+    setSubmitState('loading')
     setErrorMsg('')
+
+    const resolvedFirst   = matchedContact?.firstName ?? firstName
+    const resolvedLast    = matchedContact?.lastName  ?? lastName
+    const resolvedCompany = matchedCompany?.name      ?? companyName
+    const resolvedDomain  = matchedCompany?.domain    ?? companyDomain
 
     const selectedPartners = partners.filter((p) => selectedPartnerIds.includes(p.id))
 
@@ -127,11 +171,16 @@ export function ReferralForm({ partners, partnerError, submitterName }: Props) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          ...form,
-          partnerIds:   selectedPartnerIds,
-          partnerNames: selectedPartners.map((p) => p.name),
+          firstName:         resolvedFirst,
+          lastName:          resolvedLast,
+          email,
+          companyName:       resolvedCompany,
+          companyDomain:     resolvedDomain   || undefined,
           existingContactId: matchedContact?.id,
           existingCompanyId: matchedCompany?.id,
+          partnerIds:        selectedPartnerIds,
+          partnerNames:      selectedPartners.map((p) => p.name),
+          notes:             notes || undefined,
         }),
       })
 
@@ -140,16 +189,59 @@ export function ReferralForm({ partners, partnerError, submitterName }: Props) {
         throw new Error(data.error ?? 'Something went wrong')
       }
 
-      setStatus('success')
-      setForm(EMPTY)
+      setSubmitState('success')
+      // Reset everything
+      setEmail('');         setFirstName('');    setLastName('')
+      setCompanyName('');   setCompanyDomain(''); setNotes('')
+      setEmailState('idle'); setCompanyState('idle')
+      setMatchedContact(null); setMatchedCompany(null)
       setSelectedPartnerIds([])
-      setMatchedContact(null)
-      setMatchedCompany(null)
       router.refresh()
     } catch (err) {
-      setStatus('error')
+      setSubmitState('error')
       setErrorMsg(err instanceof Error ? err.message : 'Something went wrong')
     }
+  }
+
+  // ── Render helpers ────────────────────────────────────────────────────────────
+  function OwnerBadge({ name }: { name: string | null }) {
+    if (!name) return null
+    return (
+      <span className="text-xs text-[#8A8A8A]">Owner: <span className="text-white">{name}</span></span>
+    )
+  }
+
+  function MatchCard({
+    icon: Icon, label, name, sub, ownerName, note,
+  }: {
+    icon: React.ElementType
+    label: string
+    name: string
+    sub?: string
+    ownerName: string | null
+    note?: string
+  }) {
+    return (
+      <div className="flex items-start gap-3 rounded-lg border border-[#60FDFF]/25 bg-[#60FDFF]/6 px-4 py-3">
+        <Icon className="size-4 shrink-0 text-[#60FDFF] mt-0.5" />
+        <div className="min-w-0 flex-1 space-y-0.5">
+          <p className="text-xs font-semibold tracking-wide uppercase text-[#60FDFF]/70">{label}</p>
+          <p className="text-sm font-medium text-white truncate">{name}</p>
+          {sub  && <p className="text-xs text-[#8A8A8A]">{sub}</p>}
+          {note && <p className="text-xs text-[#60FDFF]/60 mt-1">{note}</p>}
+          <OwnerBadge name={ownerName} />
+        </div>
+      </div>
+    )
+  }
+
+  function NewBadge({ icon: Icon, label }: { icon: React.ElementType; label: string }) {
+    return (
+      <div className="flex items-center gap-2 rounded-lg border border-white/10 bg-white/4 px-3 py-2">
+        <Icon className="size-3.5 shrink-0 text-[#8A8A8A]" />
+        <span className="text-xs text-[#8A8A8A]">{label}</span>
+      </div>
+    )
   }
 
   return (
@@ -178,7 +270,7 @@ export function ReferralForm({ partners, partnerError, submitterName }: Props) {
           <div className="space-y-3">
             <p className="text-xs font-bold tracking-[0.15em] uppercase text-[#8A8A8A]">Lead Info</p>
 
-            {/* Email first — drives the live lookup */}
+            {/* Email — always visible, drives everything */}
             <div className="space-y-1.5">
               <Label htmlFor="email" className="text-white text-sm">
                 Email <span className="text-[#FF4444]">*</span>
@@ -187,154 +279,196 @@ export function ReferralForm({ partners, partnerError, submitterName }: Props) {
                 <Input
                   id="email"
                   type="email"
-                  value={form.email}
+                  value={email}
                   onChange={(e) => {
-                    set('email')(e)
-                    lookupContact(e.target.value)
+                    setEmail(e.target.value)
+                    triggerEmailLookup(e.target.value)
                   }}
                   required
                   placeholder="jane@company.com"
                   className="bg-[#1a1a1a] border-white/8 text-white placeholder:text-[#8A8A8A] focus-visible:ring-[#60FDFF] pr-8"
                 />
-                {lookingUpContact && (
+                {emailState === 'loading' && (
                   <Loader2 className="size-3.5 absolute right-2.5 top-1/2 -translate-y-1/2 text-[#8A8A8A] animate-spin" />
                 )}
               </div>
-              {matchedContact && (
-                <p className="flex items-center gap-1.5 text-xs text-[#60FDFF]">
-                  <UserCheck className="size-3.5 shrink-0" />
-                  Matched existing contact: {matchedContact.firstName} {matchedContact.lastName}
-                </p>
-              )}
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <Label htmlFor="firstName" className="text-white text-sm">
-                  First Name <span className="text-[#FF4444]">*</span>
-                </Label>
-                <Input
-                  id="firstName"
-                  value={form.firstName}
-                  onChange={set('firstName')}
-                  required
-                  placeholder="Jane"
-                  className="bg-[#1a1a1a] border-white/8 text-white placeholder:text-[#8A8A8A] focus-visible:ring-[#60FDFF]"
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="lastName" className="text-white text-sm">
-                  Last Name <span className="text-[#FF4444]">*</span>
-                </Label>
-                <Input
-                  id="lastName"
-                  value={form.lastName}
-                  onChange={set('lastName')}
-                  required
-                  placeholder="Smith"
-                  className="bg-[#1a1a1a] border-white/8 text-white placeholder:text-[#8A8A8A] focus-visible:ring-[#60FDFF]"
-                />
-              </div>
-            </div>
+            {/* Contact matched */}
+            {contactKnown && matchedContact && (
+              <MatchCard
+                icon={UserCheck}
+                label="Existing Contact"
+                name={`${matchedContact.firstName} ${matchedContact.lastName}`.trim()}
+                sub={matchedContact.email}
+                ownerName={matchedContact.ownerName}
+              />
+            )}
 
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <Label htmlFor="companyName" className="text-white text-sm">
-                  Company <span className="text-[#FF4444]">*</span>
-                </Label>
-                <div className="relative">
-                  <Input
-                    id="companyName"
-                    value={form.companyName}
-                    onChange={(e) => {
-                      set('companyName')(e)
-                      lookupCompany(form.companyDomain, e.target.value)
-                    }}
-                    required
-                    placeholder="Acme Corp"
-                    className="bg-[#1a1a1a] border-white/8 text-white placeholder:text-[#8A8A8A] focus-visible:ring-[#60FDFF]"
-                  />
+            {/* New contact — name fields only shown when contact not found */}
+            {needsName && (
+              <>
+                <NewBadge icon={UserPlus} label="New contact — will be created in HubSpot" />
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="firstName" className="text-white text-sm">
+                      First Name <span className="text-[#FF4444]">*</span>
+                    </Label>
+                    <Input
+                      id="firstName"
+                      value={firstName}
+                      onChange={(e) => setFirstName(e.target.value)}
+                      required
+                      placeholder="Jane"
+                      className="bg-[#1a1a1a] border-white/8 text-white placeholder:text-[#8A8A8A] focus-visible:ring-[#60FDFF]"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="lastName" className="text-white text-sm">
+                      Last Name <span className="text-[#FF4444]">*</span>
+                    </Label>
+                    <Input
+                      id="lastName"
+                      value={lastName}
+                      onChange={(e) => setLastName(e.target.value)}
+                      required
+                      placeholder="Smith"
+                      className="bg-[#1a1a1a] border-white/8 text-white placeholder:text-[#8A8A8A] focus-visible:ring-[#60FDFF]"
+                    />
+                  </div>
                 </div>
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="companyDomain" className="text-white text-sm">Website</Label>
-                <div className="relative">
-                  <Input
-                    id="companyDomain"
-                    value={form.companyDomain}
-                    onChange={(e) => {
-                      set('companyDomain')(e)
-                      lookupCompany(e.target.value, form.companyName)
-                    }}
-                    placeholder="acme.com"
-                    className="bg-[#1a1a1a] border-white/8 text-white placeholder:text-[#8A8A8A] focus-visible:ring-[#60FDFF] pr-8"
-                  />
-                  {lookingUpCompany && (
-                    <Loader2 className="size-3.5 absolute right-2.5 top-1/2 -translate-y-1/2 text-[#8A8A8A] animate-spin" />
-                  )}
-                </div>
-              </div>
-            </div>
+              </>
+            )}
 
-            {matchedCompany && (
-              <p className="flex items-center gap-1.5 text-xs text-[#60FDFF]">
-                <Building2 className="size-3.5 shrink-0" />
-                Matched existing company: {matchedCompany.name}
-                {matchedCompany.domain ? ` (${matchedCompany.domain})` : ''}
-              </p>
+            {/* Company matched */}
+            {companyKnown && matchedCompany && (
+              <MatchCard
+                icon={Building2}
+                label="Existing Company"
+                name={matchedCompany.name}
+                sub={matchedCompany.domain || undefined}
+                ownerName={matchedCompany.ownerName}
+                note={
+                  contactKnown && !matchedContact?.associatedCompanyId
+                    ? 'Contact will be associated with this company'
+                    : emailState === 'not-found'
+                      ? 'New contact will be associated with this company'
+                      : companySituation() ?? undefined
+                }
+              />
+            )}
+
+            {/* Company lookup spinner */}
+            {companyState === 'loading' && (
+              <div className="flex items-center gap-2 text-xs text-[#8A8A8A]">
+                <Loader2 className="size-3 animate-spin" />
+                Looking up company…
+              </div>
+            )}
+
+            {/* Company fields — shown when company not yet found and we need it */}
+            {showCompanyFields && companyState !== 'found' && (
+              <>
+                {companyState === 'not-found' && (
+                  <NewBadge icon={PlusCircle} label="New company — will be created in HubSpot" />
+                )}
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="companyName" className="text-white text-sm">
+                      Company <span className="text-[#FF4444]">*</span>
+                    </Label>
+                    <Input
+                      id="companyName"
+                      value={companyName}
+                      onChange={(e) => {
+                        setCompanyName(e.target.value)
+                        triggerCompanyLookup(companyDomain, e.target.value)
+                      }}
+                      required={needsCompany}
+                      placeholder="Acme Corp"
+                      className="bg-[#1a1a1a] border-white/8 text-white placeholder:text-[#8A8A8A] focus-visible:ring-[#60FDFF]"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="companyDomain" className="text-white text-sm">Website</Label>
+                    <div className="relative">
+                      <Input
+                        id="companyDomain"
+                        value={companyDomain}
+                        onChange={(e) => {
+                          setCompanyDomain(e.target.value)
+                          triggerCompanyLookup(e.target.value, companyName)
+                        }}
+                        placeholder="acme.com"
+                        className="bg-[#1a1a1a] border-white/8 text-white placeholder:text-[#8A8A8A] focus-visible:ring-[#60FDFF] pr-8"
+                      />
+                      {companyState === 'loading' && (
+                        <Loader2 className="size-3.5 absolute right-2.5 top-1/2 -translate-y-1/2 text-[#8A8A8A] animate-spin" />
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </>
             )}
           </div>
 
-          {/* ── Partner Selection ───────────────────────────────────────────── */}
-          <div className="space-y-3">
-            <p className="text-xs font-bold tracking-[0.15em] uppercase text-[#8A8A8A]">
-              Refer to Partner <span className="text-[#FF4444]">*</span>
-            </p>
-            <PartnerPicker
-              partners={partners}
-              selected={selectedPartnerIds}
-              onChange={setSelectedPartnerIds}
-            />
-          </div>
+          {/* ── Partner Selection (only shown once we know who the lead is) ─── */}
+          {(contactKnown || needsName) && (
+            <div className="space-y-3">
+              <p className="text-xs font-bold tracking-[0.15em] uppercase text-[#8A8A8A]">
+                Refer to Partner <span className="text-[#FF4444]">*</span>
+              </p>
+              <PartnerPicker
+                partners={partners}
+                selected={selectedPartnerIds}
+                onChange={setSelectedPartnerIds}
+              />
+            </div>
+          )}
 
           {/* ── Notes ──────────────────────────────────────────────────────── */}
-          <div className="space-y-1.5">
-            <Label htmlFor="notes" className="text-white text-sm">Notes</Label>
-            <Textarea
-              id="notes"
-              value={form.notes}
-              onChange={set('notes')}
-              placeholder="Context about this lead or referral…"
-              rows={3}
-              className="bg-[#1a1a1a] border-white/8 text-white placeholder:text-[#8A8A8A] focus-visible:ring-[#60FDFF] resize-none"
-            />
-          </div>
+          {(contactKnown || needsName) && (
+            <div className="space-y-1.5">
+              <Label htmlFor="notes" className="text-white text-sm">Notes</Label>
+              <Textarea
+                id="notes"
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                placeholder="Context about this lead or referral…"
+                rows={3}
+                className="bg-[#1a1a1a] border-white/8 text-white placeholder:text-[#8A8A8A] focus-visible:ring-[#60FDFF] resize-none"
+              />
+            </div>
+          )}
 
           {/* ── Status feedback ─────────────────────────────────────────────── */}
-          {status === 'success' && (
+          {submitState === 'success' && (
             <div className="flex items-center gap-2 text-[#60FF80] text-sm">
               <CheckCircle className="size-4 shrink-0" />
               Referral logged successfully in HubSpot.
             </div>
           )}
-          {status === 'error' && (
+          {submitState === 'error' && (
             <div className="flex items-center gap-2 text-[#FF4444] text-sm">
               <AlertCircle className="size-4 shrink-0" />
               {errorMsg}
             </div>
           )}
 
-          <Button
-            type="submit"
-            disabled={status === 'loading' || selectedPartnerIds.length === 0}
-            className="w-full bg-[#60FDFF] text-black font-bold hover:bg-[#60FDFF]/90 disabled:opacity-40"
-          >
-            {status === 'loading' ? (
-              <><Loader2 className="size-4 mr-2 animate-spin" /> Logging Referral…</>
-            ) : (
-              'Log Referral'
-            )}
-          </Button>
+          {/* Submit — only shown once the form has enough info */}
+          {(contactKnown || needsName) && (
+            <Button
+              type="submit"
+              disabled={submitState === 'loading' || !canSubmit}
+              className="w-full bg-[#60FDFF] text-black font-bold hover:bg-[#60FDFF]/90 disabled:opacity-40"
+            >
+              {submitState === 'loading' ? (
+                <><Loader2 className="size-4 mr-2 animate-spin" /> Logging Referral…</>
+              ) : (
+                'Log Referral'
+              )}
+            </Button>
+          )}
         </form>
       </CardContent>
     </Card>
