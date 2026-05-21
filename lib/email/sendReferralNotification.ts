@@ -71,23 +71,33 @@ export async function sendReferralNotification(payload: ReferralNotificationPayl
     companyOwnerName: companyOwner?.name,
   })
 
+  const subject = `New Partner Referral: ${payload.companyName} → ${payload.partnerNames.join(', ')}`
+
+  console.log(`[sendReferralNotification] sending "${subject}" to ${recipients.length} recipients: ${recipients.join(', ')}`)
+
   const results = await Promise.allSettled(
     recipients.map((to) =>
       resend.emails.send({
         from: 'Avenue Z <notifications@send.avenuez.com>',
         to,
-        subject: `New Partner Referral: ${payload.companyName} → ${payload.partnerNames.join(', ')}`,
+        subject,
         react: emailElement,
       })
     )
   )
 
+  let successCount = 0
   for (let i = 0; i < results.length; i++) {
     const r = results[i]
     if (r.status === 'rejected') {
-      console.error(`[sendReferralNotification] failed to send to ${recipients[i]}:`, r.reason)
+      console.error(`[sendReferralNotification] FAILED ${recipients[i]}:`, r.reason)
     } else if (r.value.error) {
-      console.error(`[sendReferralNotification] Resend error for ${recipients[i]}:`, r.value.error)
+      console.error(`[sendReferralNotification] FAILED ${recipients[i]}:`, r.value.error)
+    } else {
+      console.log(`[sendReferralNotification] OK ${recipients[i]} (id: ${r.value.data?.id})`)
+      successCount++
     }
   }
+
+  console.log(`[sendReferralNotification] done — ${successCount}/${recipients.length} sent`)
 }
