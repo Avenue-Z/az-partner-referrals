@@ -25,4 +25,9 @@ describe('extractIp', () => {
     const req = reqWith({ 'x-forwarded-for': '   7.7.7.7   , 8.8.8.8' })
     expect(extractIp(req)).toBe('7.7.7.7')
   })
+
+  it('falls through to "unknown" when x-real-ip is whitespace only', () => {
+    const req = reqWith({ 'x-real-ip': '   ' })
+    expect(extractIp(req)).toBe('unknown')
+  })
 })
