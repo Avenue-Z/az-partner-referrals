@@ -328,18 +328,18 @@ export async function getOwnerIdByEmail(email: string): Promise<string | undefin
 
 type AssocSpec = { associationCategory: 'HUBSPOT_DEFINED' | 'USER_DEFINED'; associationTypeId: number }
 
-// Module-level cache — populated once per server instance
-let _companyPartnerAssocSpec: AssocSpec | null = null
+// Cache keyed by "fromType→toType"
+const _assocSpecCache = new Map<string, AssocSpec>()
 
 /**
- * Discover the correct HubSpot association type for Company → Partners custom object.
- * HubSpot assigns typeId values dynamically; we query the v4 labels endpoint and cache.
- *
- * We try both directions (companies→partner and partner→companies) because HubSpot
- * creates paired types and the correct direction must match the create call.
+ * Discover the correct HubSpot v4 association type between two object types.
+ * HubSpot assigns typeIds dynamically; we call the labels endpoint once per pair
+ * and cache the result. Both directions are tried so we find the spec regardless
+ * of how the association was originally defined on the custom object.
  */
-async function getCompanyPartnerAssocSpec(): Promise<AssocSpec> {
-  if (_companyPartnerAssocSpec) return _companyPartnerAssocSpec
+async function getAssocSpec(fromType: string, toType: string): Promise<AssocSpec> {
+  const key = `${fromType}→${toType}`
+  if (_assocSpecCache.has(key)) return _assocSpecCache.get(key)!
 
   const token = process.env.HUBSPOT_ACCESS_TOKEN
   if (!token) {
@@ -347,18 +347,14 @@ async function getCompanyPartnerAssocSpec(): Promise<AssocSpec> {
     return { associationCategory: 'HUBSPOT_DEFINED', associationTypeId: 1 }
   }
 
-  // Try the primary direction first, then the inverse
   const endpoints = [
-    `https://api.hubapi.com/crm/v4/associations/companies/${PARTNERS_OBJECT_TYPE}/labels`,
-    `https://api.hubapi.com/crm/v4/associations/${PARTNERS_OBJECT_TYPE}/companies/labels`,
+    `https://api.hubapi.com/crm/v4/associations/${fromType}/${toType}/labels`,
+    `https://api.hubapi.com/crm/v4/associations/${toType}/${fromType}/labels`,
   ]
 
   for (const url of endpoints) {
     try {
-      const res = await fetch(url, {
-        headers: { Authorization: `Bearer ${token}` },
-        cache: 'no-store',
-      })
+      const res  = await fetch(url, { headers: { Authorization: `Bearer ${token}` }, cache: 'no-store' })
       const body = await res.text()
 
       if (!res.ok) {
@@ -366,50 +362,48 @@ async function getCompanyPartnerAssocSpec(): Promise<AssocSpec> {
         continue
       }
 
-      const data = JSON.parse(body) as { results: Array<{ category: string; typeId: number; label?: string }> }
-      console.log(`[assocSpec] ${url} results:`, JSON.stringify(data.results))
+      const data  = JSON.parse(body) as { results: Array<{ category: string; typeId: number }> }
+      console.log(`[assocSpec] ${url} →`, JSON.stringify(data.results))
 
       const first = data.results?.[0]
       if (first?.typeId) {
-        _companyPartnerAssocSpec = {
+        const spec: AssocSpec = {
           associationCategory: first.category as AssocSpec['associationCategory'],
-          associationTypeId: first.typeId,
+          associationTypeId:   first.typeId,
         }
-        console.log('[assocSpec] Using type:', _companyPartnerAssocSpec)
-        return _companyPartnerAssocSpec
+        _assocSpecCache.set(key, spec)
+        console.log(`[assocSpec] cached ${key}:`, spec)
+        return spec
       }
     } catch (err) {
-      console.error(`[assocSpec] fetch error for ${url}:`, err)
+      console.error(`[assocSpec] fetch error ${url}:`, err)
     }
   }
 
-  console.error('[assocSpec] Could not discover any association type — falling back to HUBSPOT_DEFINED/1')
-  _companyPartnerAssocSpec = { associationCategory: 'HUBSPOT_DEFINED', associationTypeId: 1 }
-  return _companyPartnerAssocSpec
+  console.error(`[assocSpec] no type found for ${key} — falling back to HUBSPOT_DEFINED/1`)
+  const fallback: AssocSpec = { associationCategory: 'HUBSPOT_DEFINED', associationTypeId: 1 }
+  _assocSpecCache.set(key, fallback)
+  return fallback
 }
 
 /**
- * Create a company → partner association via direct fetch so we can log the full
- * HubSpot error body if it fails (the SDK swallows details).
+ * Associate any two HubSpot objects via direct fetch (not SDK) so the full
+ * error body is visible in logs when something goes wrong.
  */
-async function createCompanyPartnerAssociation(
-  companyId: string,
-  partnerId: string,
+async function createAssociation(
+  fromType: string,
+  fromId: string,
+  toType: string,
+  toId: string,
   spec: AssocSpec,
 ): Promise<void> {
   const token = process.env.HUBSPOT_ACCESS_TOKEN!
-  const url = `https://api.hubapi.com/crm/v4/objects/companies/${companyId}/associations/${PARTNERS_OBJECT_TYPE}/${partnerId}`
+  const url   = `https://api.hubapi.com/crm/v4/objects/${fromType}/${fromId}/associations/${toType}/${toId}`
 
   const res = await fetch(url, {
     method: 'PUT',
-    headers: {
-      Authorization: `Bearer ${token}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify([{
-      associationCategory: spec.associationCategory,
-      associationTypeId:   spec.associationTypeId,
-    }]),
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify([{ associationCategory: spec.associationCategory, associationTypeId: spec.associationTypeId }]),
     cache: 'no-store',
   })
 
@@ -536,17 +530,27 @@ export async function logReferral(payload: ReferralPayload): Promise<void> {
     console.error('[logReferral] contact→company association failed:', err)
   }
 
-  // 5. Associate lead company → each selected partner object record (sequential)
-  //    HubSpot assigns association typeIds dynamically — we discover the correct one
-  //    via the labels endpoint and use a direct fetch so the full error body is visible.
-  const partnerAssocSpec = await getCompanyPartnerAssocSpec()
+  // 5. Associate lead company → each selected partner object record
+  const companyPartnerSpec = await getAssocSpec('companies', PARTNERS_OBJECT_TYPE)
 
   for (const partnerId of payload.partnerIds) {
     try {
-      await createCompanyPartnerAssociation(companyId, partnerId, partnerAssocSpec)
-      console.log(`[logReferral] ✓ Associated company ${companyId} → partner ${partnerId} (typeId=${partnerAssocSpec.associationTypeId})`)
+      await createAssociation('companies', companyId, PARTNERS_OBJECT_TYPE, partnerId, companyPartnerSpec)
+      console.log(`[logReferral] ✓ company ${companyId} → partner ${partnerId} (typeId=${companyPartnerSpec.associationTypeId})`)
     } catch (err) {
-      console.error(`[logReferral] ✗ company→partner association failed — company:${companyId} partner:${partnerId}`, err)
+      console.error(`[logReferral] ✗ company→partner failed — company:${companyId} partner:${partnerId}`, err)
+    }
+  }
+
+  // 6. Associate lead contact → each selected partner object record
+  const contactPartnerSpec = await getAssocSpec('contacts', PARTNERS_OBJECT_TYPE)
+
+  for (const partnerId of payload.partnerIds) {
+    try {
+      await createAssociation('contacts', contactId, PARTNERS_OBJECT_TYPE, partnerId, contactPartnerSpec)
+      console.log(`[logReferral] ✓ contact ${contactId} → partner ${partnerId} (typeId=${contactPartnerSpec.associationTypeId})`)
+    } catch (err) {
+      console.error(`[logReferral] ✗ contact→partner failed — contact:${contactId} partner:${partnerId}`, err)
     }
   }
 }
