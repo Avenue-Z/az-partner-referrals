@@ -134,7 +134,7 @@ async function main() {
     // Patch send to capture instead of send
     client.emails.send = async (params: any) => {
       captured.push(params)
-      return { data: { id: 'dry-run-id' }, error: null }
+      return { data: { id: 'dry-run-id' }, error: null, headers: null }
     }
 
     const html = await render(React.createElement(ReferralNotificationEmail, SAMPLE))
