@@ -344,8 +344,13 @@ export type ReferralPayload = {
   submitterEmail: string
 }
 
+export type ReferralResult = {
+  contactId: string
+  companyId: string
+}
+
 /** Upsert contact + company, set referral properties, and associate with selected partners. */
-export async function logReferral(payload: ReferralPayload): Promise<void> {
+export async function logReferral(payload: ReferralPayload): Promise<ReferralResult> {
   const hs = getHubSpotClient()
 
   // 1. Resolve submitter's owner ID
@@ -451,4 +456,6 @@ export async function logReferral(payload: ReferralPayload): Promise<void> {
       )
     } catch { /* non-fatal */ }
   }
+
+  return { contactId, companyId }
 }

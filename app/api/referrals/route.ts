@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/auth'
 import { logReferral } from '@/lib/hubspot/client'
+import { sendReferralNotification } from '@/lib/email/sendReferralNotification'
 
 export async function POST(req: NextRequest) {
   const session = await auth()
@@ -36,7 +37,7 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    await logReferral({
+    const { contactId, companyId } = await logReferral({
       firstName,
       lastName,
       email,
@@ -51,6 +52,19 @@ export async function POST(req: NextRequest) {
       notes: typeof notes === 'string' ? notes : undefined,
       submitterEmail: session.user.email,
     })
+
+    // Fire notification emails — errors are logged but never fail the request
+    sendReferralNotification({
+      contactId,
+      companyId,
+      submitterEmail: session.user.email,
+      contactName: `${firstName} ${lastName}`,
+      contactEmail: email,
+      companyName,
+      partnerNames: partnerNames as string[],
+      notes: typeof notes === 'string' ? notes : undefined,
+    }).catch((err) => console.error('[/api/referrals] notification failed:', err))
+
     return NextResponse.json({ ok: true })
   } catch (err) {
     console.error('[/api/referrals]', err)
