@@ -17,7 +17,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       credentials: {},
       authorize() {
         if (!isDev) return null
-        return { id: 'dev', name: 'Dev User', email: 'dev@avenuez.com' }
+        const email = process.env.DEV_USER_EMAIL ?? 'dev@avenuez.com'
+        return { id: 'dev', name: 'Dev User', email }
       },
     }),
   ],
