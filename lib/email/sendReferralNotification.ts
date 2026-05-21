@@ -74,7 +74,7 @@ export async function sendReferralNotification(payload: ReferralNotificationPayl
   const results = await Promise.allSettled(
     recipients.map((to) =>
       resend.emails.send({
-        from: 'Avenue Z <onboarding@resend.dev>',
+        from: 'Avenue Z <notifications@send.avenuez.com>',
         to,
         subject: `New Partner Referral: ${payload.companyName} → ${payload.partnerNames.join(', ')}`,
         react: emailElement,
