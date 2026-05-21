@@ -333,8 +333,10 @@ let _companyPartnerAssocSpec: AssocSpec | null = null
 
 /**
  * Discover the correct HubSpot association type for Company → Partners custom object.
- * HubSpot assigns typeId values dynamically when a custom object is created —
- * we cannot hardcode them. This calls the v4 labels endpoint and caches the result.
+ * HubSpot assigns typeId values dynamically; we query the v4 labels endpoint and cache.
+ *
+ * We try both directions (companies→partner and partner→companies) because HubSpot
+ * creates paired types and the correct direction must match the create call.
  */
 async function getCompanyPartnerAssocSpec(): Promise<AssocSpec> {
   if (_companyPartnerAssocSpec) return _companyPartnerAssocSpec
@@ -345,34 +347,76 @@ async function getCompanyPartnerAssocSpec(): Promise<AssocSpec> {
     return { associationCategory: 'HUBSPOT_DEFINED', associationTypeId: 1 }
   }
 
-  try {
-    const res = await fetch(
-      `https://api.hubapi.com/crm/v4/associations/companies/${PARTNERS_OBJECT_TYPE}/labels`,
-      { headers: { Authorization: `Bearer ${token}` }, cache: 'no-store' },
-    )
+  // Try the primary direction first, then the inverse
+  const endpoints = [
+    `https://api.hubapi.com/crm/v4/associations/companies/${PARTNERS_OBJECT_TYPE}/labels`,
+    `https://api.hubapi.com/crm/v4/associations/${PARTNERS_OBJECT_TYPE}/companies/labels`,
+  ]
 
-    if (!res.ok) {
-      console.error('[assocSpec] Labels endpoint returned', res.status, await res.text())
-    } else {
-      const data = await res.json() as { results: Array<{ category: string; typeId: number }> }
+  for (const url of endpoints) {
+    try {
+      const res = await fetch(url, {
+        headers: { Authorization: `Bearer ${token}` },
+        cache: 'no-store',
+      })
+      const body = await res.text()
+
+      if (!res.ok) {
+        console.error(`[assocSpec] ${url} → ${res.status}:`, body)
+        continue
+      }
+
+      const data = JSON.parse(body) as { results: Array<{ category: string; typeId: number; label?: string }> }
+      console.log(`[assocSpec] ${url} results:`, JSON.stringify(data.results))
+
       const first = data.results?.[0]
       if (first?.typeId) {
-        console.log(`[assocSpec] Discovered company→partner type: category=${first.category} typeId=${first.typeId}`)
         _companyPartnerAssocSpec = {
           associationCategory: first.category as AssocSpec['associationCategory'],
           associationTypeId: first.typeId,
         }
+        console.log('[assocSpec] Using type:', _companyPartnerAssocSpec)
         return _companyPartnerAssocSpec
       }
-      console.error('[assocSpec] No association types found between companies and', PARTNERS_OBJECT_TYPE)
+    } catch (err) {
+      console.error(`[assocSpec] fetch error for ${url}:`, err)
     }
-  } catch (err) {
-    console.error('[assocSpec] Failed to discover association type:', err)
   }
 
-  // Fallback — will likely fail but logs the attempt clearly
+  console.error('[assocSpec] Could not discover any association type — falling back to HUBSPOT_DEFINED/1')
   _companyPartnerAssocSpec = { associationCategory: 'HUBSPOT_DEFINED', associationTypeId: 1 }
   return _companyPartnerAssocSpec
+}
+
+/**
+ * Create a company → partner association via direct fetch so we can log the full
+ * HubSpot error body if it fails (the SDK swallows details).
+ */
+async function createCompanyPartnerAssociation(
+  companyId: string,
+  partnerId: string,
+  spec: AssocSpec,
+): Promise<void> {
+  const token = process.env.HUBSPOT_ACCESS_TOKEN!
+  const url = `https://api.hubapi.com/crm/v4/objects/companies/${companyId}/associations/${PARTNERS_OBJECT_TYPE}/${partnerId}`
+
+  const res = await fetch(url, {
+    method: 'PUT',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify([{
+      associationCategory: spec.associationCategory,
+      associationTypeId:   spec.associationTypeId,
+    }]),
+    cache: 'no-store',
+  })
+
+  if (!res.ok) {
+    const body = await res.text()
+    throw new Error(`HubSpot ${res.status}: ${body}`)
+  }
 }
 
 // ── Referral write ────────────────────────────────────────────────────────────
@@ -405,30 +449,28 @@ export async function logReferral(payload: ReferralPayload): Promise<void> {
   // 2. Upsert contact
   let contactId: string
 
-  // Base props (no owner) — used when updating an existing record without reassignment
-  const baseContactProps: Record<string, string> = {
-    firstname: payload.firstName,
-    lastname:  payload.lastName,
-    email:     payload.email,
-    company:   payload.companyName,
-  }
-
   if (payload.existingContactId) {
-    // Existing contact: only touch owner when the user explicitly opted in
+    // Existing contact — record is already correct; only touch owner if user opted in.
+    // Do NOT overwrite name, email, or the denormalised "company" text field.
     contactId = payload.existingContactId
-    await hs.crm.contacts.basicApi.update(contactId, {
-      properties: {
-        ...baseContactProps,
-        ...(payload.reassignContactOwner && ownerId ? { hubspot_owner_id: ownerId } : {}),
-      },
-    })
+    if (payload.reassignContactOwner && ownerId) {
+      await hs.crm.contacts.basicApi.update(contactId, {
+        properties: { hubspot_owner_id: ownerId },
+      })
+    }
   } else {
-    // New contact: always assign to submitter
+    // New contact: create with full props and assign to submitter
+    const newContactProps: Record<string, string> = {
+      firstname: payload.firstName,
+      lastname:  payload.lastName,
+      email:     payload.email,
+      company:   payload.companyName,
+      ...(ownerId ? { hubspot_owner_id: ownerId } : {}),
+    }
     const search = await hs.crm.contacts.searchApi.doSearch({
       filterGroups: [{ filters: [{ propertyName: 'email', operator: 'EQ' as any, value: payload.email }] }],
       properties: ['email'], limit: 1, after: '0', sorts: [],
     })
-    const newContactProps = { ...baseContactProps, ...(ownerId ? { hubspot_owner_id: ownerId } : {}) }
     if (search.total > 0) {
       contactId = search.results[0].id
       await hs.crm.contacts.basicApi.update(contactId, { properties: newContactProps })
@@ -441,30 +483,31 @@ export async function logReferral(payload: ReferralPayload): Promise<void> {
   // 3. Upsert company
   let companyId: string
 
-  // Referral fields always written on the company regardless of create/update
+  // Referral tracking fields — always written, on both new and existing companies
   const referralProps: Record<string, string> = {
     referred_to_partner: 'Yes',
     referred_to:         payload.partnerNames.join(', '),
     ...(payload.notes ? { referral_process: payload.notes } : {}),
   }
 
-  const baseCompanyProps: Record<string, string> = {
-    name: payload.companyName,
-    ...(payload.companyDomain ? { domain: payload.companyDomain } : {}),
-    ...referralProps,
-  }
-
   if (payload.existingCompanyId) {
-    // Existing company: only touch owner when the user explicitly opted in
+    // Existing company — ONLY write referral tracking fields and optional owner.
+    // Never overwrite name, domain, or any other identity property.
     companyId = payload.existingCompanyId
     await hs.crm.companies.basicApi.update(companyId, {
       properties: {
-        ...baseCompanyProps,
+        ...referralProps,
         ...(payload.reassignCompanyOwner && ownerId ? { hubspot_owner_id: ownerId } : {}),
       },
     })
   } else {
-    // New company: always assign to submitter
+    // New company: create with full identity props + referral fields + owner
+    const newCompanyProps: Record<string, string> = {
+      name: payload.companyName,
+      ...(payload.companyDomain ? { domain: payload.companyDomain } : {}),
+      ...referralProps,
+      ...(ownerId ? { hubspot_owner_id: ownerId } : {}),
+    }
     const domainFilter = payload.companyDomain
       ? [{ propertyName: 'domain', operator: 'EQ' as any, value: payload.companyDomain }]
       : [{ propertyName: 'name',   operator: 'EQ' as any, value: payload.companyName   }]
@@ -473,7 +516,6 @@ export async function logReferral(payload: ReferralPayload): Promise<void> {
       filterGroups: [{ filters: domainFilter }],
       properties: ['name'], limit: 1, after: '0', sorts: [],
     })
-    const newCompanyProps = { ...baseCompanyProps, ...(ownerId ? { hubspot_owner_id: ownerId } : {}) }
     if (search.total > 0) {
       companyId = search.results[0].id
       await hs.crm.companies.basicApi.update(companyId, { properties: newCompanyProps })
@@ -495,20 +537,16 @@ export async function logReferral(payload: ReferralPayload): Promise<void> {
   }
 
   // 5. Associate lead company → each selected partner object record (sequential)
-  //    Look up the real association type ID first — HubSpot assigns these dynamically
-  //    when the custom object is created; we cannot hardcode them.
+  //    HubSpot assigns association typeIds dynamically — we discover the correct one
+  //    via the labels endpoint and use a direct fetch so the full error body is visible.
   const partnerAssocSpec = await getCompanyPartnerAssocSpec()
 
   for (const partnerId of payload.partnerIds) {
     try {
-      await hs.crm.associations.v4.basicApi.create(
-        'companies', companyId,
-        PARTNERS_OBJECT_TYPE, partnerId,
-        [partnerAssocSpec as any],
-      )
-      console.log(`[logReferral] Associated company ${companyId} → partner ${partnerId} (type ${partnerAssocSpec.associationTypeId})`)
+      await createCompanyPartnerAssociation(companyId, partnerId, partnerAssocSpec)
+      console.log(`[logReferral] ✓ Associated company ${companyId} → partner ${partnerId} (typeId=${partnerAssocSpec.associationTypeId})`)
     } catch (err) {
-      console.error(`[logReferral] company→partner association failed (company: ${companyId}, partner: ${partnerId}):`, err)
+      console.error(`[logReferral] ✗ company→partner association failed — company:${companyId} partner:${partnerId}`, err)
     }
   }
 }
