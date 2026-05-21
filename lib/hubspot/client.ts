@@ -324,6 +324,57 @@ export async function getOwnerIdByEmail(email: string): Promise<string | undefin
   }
 }
 
+// ── Association type discovery ────────────────────────────────────────────────
+
+type AssocSpec = { associationCategory: 'HUBSPOT_DEFINED' | 'USER_DEFINED'; associationTypeId: number }
+
+// Module-level cache — populated once per server instance
+let _companyPartnerAssocSpec: AssocSpec | null = null
+
+/**
+ * Discover the correct HubSpot association type for Company → Partners custom object.
+ * HubSpot assigns typeId values dynamically when a custom object is created —
+ * we cannot hardcode them. This calls the v4 labels endpoint and caches the result.
+ */
+async function getCompanyPartnerAssocSpec(): Promise<AssocSpec> {
+  if (_companyPartnerAssocSpec) return _companyPartnerAssocSpec
+
+  const token = process.env.HUBSPOT_ACCESS_TOKEN
+  if (!token) {
+    console.error('[assocSpec] HUBSPOT_ACCESS_TOKEN not set')
+    return { associationCategory: 'HUBSPOT_DEFINED', associationTypeId: 1 }
+  }
+
+  try {
+    const res = await fetch(
+      `https://api.hubapi.com/crm/v4/associations/companies/${PARTNERS_OBJECT_TYPE}/labels`,
+      { headers: { Authorization: `Bearer ${token}` }, cache: 'no-store' },
+    )
+
+    if (!res.ok) {
+      console.error('[assocSpec] Labels endpoint returned', res.status, await res.text())
+    } else {
+      const data = await res.json() as { results: Array<{ category: string; typeId: number }> }
+      const first = data.results?.[0]
+      if (first?.typeId) {
+        console.log(`[assocSpec] Discovered company→partner type: category=${first.category} typeId=${first.typeId}`)
+        _companyPartnerAssocSpec = {
+          associationCategory: first.category as AssocSpec['associationCategory'],
+          associationTypeId: first.typeId,
+        }
+        return _companyPartnerAssocSpec
+      }
+      console.error('[assocSpec] No association types found between companies and', PARTNERS_OBJECT_TYPE)
+    }
+  } catch (err) {
+    console.error('[assocSpec] Failed to discover association type:', err)
+  }
+
+  // Fallback — will likely fail but logs the attempt clearly
+  _companyPartnerAssocSpec = { associationCategory: 'HUBSPOT_DEFINED', associationTypeId: 1 }
+  return _companyPartnerAssocSpec
+}
+
 // ── Referral write ────────────────────────────────────────────────────────────
 
 export type ReferralPayload = {
@@ -439,16 +490,25 @@ export async function logReferral(payload: ReferralPayload): Promise<void> {
       'companies', companyId,
       [{ associationCategory: 'HUBSPOT_DEFINED' as any, associationTypeId: 279 }],
     )
-  } catch { /* non-fatal */ }
+  } catch (err) {
+    console.error('[logReferral] contact→company association failed:', err)
+  }
 
   // 5. Associate lead company → each selected partner object record (sequential)
+  //    Look up the real association type ID first — HubSpot assigns these dynamically
+  //    when the custom object is created; we cannot hardcode them.
+  const partnerAssocSpec = await getCompanyPartnerAssocSpec()
+
   for (const partnerId of payload.partnerIds) {
     try {
       await hs.crm.associations.v4.basicApi.create(
         'companies', companyId,
         PARTNERS_OBJECT_TYPE, partnerId,
-        [{ associationCategory: 'USER_DEFINED' as any, associationTypeId: 1 }],
+        [partnerAssocSpec as any],
       )
-    } catch { /* non-fatal */ }
+      console.log(`[logReferral] Associated company ${companyId} → partner ${partnerId} (type ${partnerAssocSpec.associationTypeId})`)
+    } catch (err) {
+      console.error(`[logReferral] company→partner association failed (company: ${companyId}, partner: ${partnerId}):`, err)
+    }
   }
 }
