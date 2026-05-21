@@ -41,9 +41,9 @@ function buildLimiters(): LimiterSet | null {
   const redis = new Redis({ url, token })
   return {
     userMinute: new Ratelimit({ redis, limiter: Ratelimit.slidingWindow(10,  '60 s'),    prefix: 'rl:user:m' }),
-    userHour:   new Ratelimit({ redis, limiter: Ratelimit.slidingWindow(100, '3600 s'),  prefix: 'rl:user:h' }),
+    userHour:   new Ratelimit({ redis, limiter: Ratelimit.slidingWindow(100, '1 h'),  prefix: 'rl:user:h' }),
     ipMinute:   new Ratelimit({ redis, limiter: Ratelimit.slidingWindow(30,  '60 s'),    prefix: 'rl:ip:m'   }),
-    ipHour:     new Ratelimit({ redis, limiter: Ratelimit.slidingWindow(300, '3600 s'),  prefix: 'rl:ip:h'   }),
+    ipHour:     new Ratelimit({ redis, limiter: Ratelimit.slidingWindow(300, '1 h'),  prefix: 'rl:ip:h'   }),
   }
 }
 

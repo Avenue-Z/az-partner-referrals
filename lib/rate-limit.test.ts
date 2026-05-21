@@ -94,7 +94,7 @@ describe('checkReferralRateLimit', () => {
     expect(result.ok).toBe(false)
     if (result.ok) return
     expect(result.scope).toBe('ip-minute')
-    expect(result.retryAfter).toBeLessThanOrEqual(10)
+    expect(result.retryAfter).toBe(10)
   })
 
   it('fails open when a limiter throws (Redis outage)', async () => {
