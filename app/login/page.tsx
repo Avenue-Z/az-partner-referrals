@@ -3,6 +3,8 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 
 export default function LoginPage() {
+  const isDev = process.env.NODE_ENV === 'development'
+
   return (
     <div className="min-h-screen flex items-center justify-center bg-black px-4">
       <div className="w-full max-w-sm space-y-6">
@@ -18,7 +20,7 @@ export default function LoginPage() {
               Use your Avenue Z Google account to continue.
             </CardDescription>
           </CardHeader>
-          <CardContent>
+          <CardContent className="space-y-3">
             <form
               action={async () => {
                 'use server'
@@ -32,6 +34,23 @@ export default function LoginPage() {
                 Continue with Google
               </Button>
             </form>
+
+            {isDev && (
+              <form
+                action={async () => {
+                  'use server'
+                  await signIn('dev-bypass', { redirectTo: '/referrals' })
+                }}
+              >
+                <Button
+                  type="submit"
+                  variant="outline"
+                  className="w-full border-dashed border-white/20 text-[#8A8A8A] hover:text-white hover:border-white/40 hover:bg-transparent text-xs"
+                >
+                  Dev bypass (local only)
+                </Button>
+              </form>
+            )}
           </CardContent>
         </Card>
       </div>
