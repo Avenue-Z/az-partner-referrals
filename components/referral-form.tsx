@@ -54,12 +54,14 @@ export function ReferralForm({ partners, partnerError, submitterName }: Props) {
   const [retrySeconds, setRetrySeconds] = useState(0)
 
   // ── Rate-limit countdown ──────────────────────────────────────────────────────
+  // Re-run only when the active/inactive boolean flips, not on every tick — the
+  // interval persists for the full countdown.
+  const countdownActive = retrySeconds > 0
   useEffect(() => {
-    if (retrySeconds <= 0) return
+    if (!countdownActive) return
     const id = setInterval(() => {
       setRetrySeconds((s) => {
         if (s <= 1) {
-          clearInterval(id)
           setSubmitState('idle')
           setErrorMsg('')
           return 0
@@ -68,7 +70,7 @@ export function ReferralForm({ partners, partnerError, submitterName }: Props) {
       })
     }, 1000)
     return () => clearInterval(id)
-  }, [retrySeconds])
+  }, [countdownActive])
 
   // ── Debounce timers ───────────────────────────────────────────────────────────
   const emailTimer   = useRef<ReturnType<typeof setTimeout> | null>(null)

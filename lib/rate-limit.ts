@@ -9,6 +9,8 @@ export function extractIp(req: Request): string {
   }
   const xri = req.headers.get('x-real-ip')?.trim()
   if (xri) return xri
+  // Shared bucket for IP-less traffic — intentional, so unknown-IP requests
+  // don't get a free pass on the per-IP limits.
   return 'unknown'
 }
 
