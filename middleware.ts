@@ -10,5 +10,10 @@ export default auth((req) => {
 })
 
 export const config = {
-  matcher: ['/referrals/:path*', '/api/referrals/:path*', '/api/partners/:path*'],
+  matcher: [
+    '/referrals/:path*',
+    '/api/referrals/:path*',
+    '/api/partners/:path*',
+    '/api/lookup/:path*',
+  ],
 }
