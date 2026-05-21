@@ -1,11 +1,23 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/auth'
 import { logReferral } from '@/lib/hubspot/client'
+import { checkReferralRateLimit, extractIp } from '@/lib/rate-limit'
 
 export async function POST(req: NextRequest) {
   const session = await auth()
   if (!session?.user?.email) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+
+  const rl = await checkReferralRateLimit({
+    email: session.user.email,
+    ip:    extractIp(req),
+  })
+  if (!rl.ok) {
+    return NextResponse.json(
+      { error: 'Too many requests', retryAfter: rl.retryAfter, scope: rl.scope },
+      { status: 429, headers: { 'Retry-After': String(rl.retryAfter) } },
+    )
   }
 
   let body: unknown
