@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback, useRef } from 'react'
+import { useState, useCallback, useRef, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
@@ -51,6 +51,24 @@ export function ReferralForm({ partners, partnerError, submitterName }: Props) {
   // ── Submit state ──────────────────────────────────────────────────────────────
   const [submitState, setSubmitState] = useState<'idle' | 'loading' | 'success' | 'error'>('idle')
   const [errorMsg,    setErrorMsg]    = useState('')
+  const [retrySeconds, setRetrySeconds] = useState(0)
+
+  // ── Rate-limit countdown ──────────────────────────────────────────────────────
+  useEffect(() => {
+    if (retrySeconds <= 0) return
+    const id = setInterval(() => {
+      setRetrySeconds((s) => {
+        if (s <= 1) {
+          clearInterval(id)
+          setSubmitState('idle')
+          setErrorMsg('')
+          return 0
+        }
+        return s - 1
+      })
+    }, 1000)
+    return () => clearInterval(id)
+  }, [retrySeconds])
 
   // ── Debounce timers ───────────────────────────────────────────────────────────
   const emailTimer   = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -187,6 +205,15 @@ export function ReferralForm({ partners, partnerError, submitterName }: Props) {
       })
 
       if (!res.ok) {
+        if (res.status === 429) {
+          const data = await res.json().catch(() => ({})) as { retryAfter?: number; scope?: string }
+          const seconds = typeof data.retryAfter === 'number' && data.retryAfter > 0 ? data.retryAfter : 60
+          if (data.scope) console.warn('[rate-limit] tripped scope:', data.scope)
+          setRetrySeconds(seconds)
+          setSubmitState('error')
+          setErrorMsg(`You're submitting too quickly. Try again in ${seconds} second${seconds === 1 ? '' : 's'}.`)
+          return
+        }
         const data = await res.json().catch(() => ({})) as Record<string, string>
         throw new Error(data.error ?? 'Something went wrong')
       }
@@ -508,11 +535,13 @@ export function ReferralForm({ partners, partnerError, submitterName }: Props) {
           {(contactKnown || needsName) && (
             <Button
               type="submit"
-              disabled={submitState === 'loading' || !canSubmit}
+              disabled={submitState === 'loading' || retrySeconds > 0 || !canSubmit}
               className="w-full bg-[#60FDFF] text-black font-bold hover:bg-[#60FDFF]/90 disabled:opacity-40"
             >
               {submitState === 'loading' ? (
                 <><Loader2 className="size-4 mr-2 animate-spin" /> Logging Referral…</>
+              ) : retrySeconds > 0 ? (
+                `Try again in ${retrySeconds}s`
               ) : (
                 'Log Referral'
               )}
