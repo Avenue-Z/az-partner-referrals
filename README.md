@@ -64,6 +64,8 @@ npm run dev        # starts on http://localhost:3002
 | `AUTH_GOOGLE_SECRET` | OAuth 2.0 Client Secret from Google Cloud Console |
 | `HUBSPOT_ACCESS_TOKEN` | HubSpot Service Key (see below) |
 | `NEXTAUTH_URL` | Full base URL of the app (e.g. `http://localhost:3002`) |
+| `KV_REST_API_URL` | Vercel KV REST endpoint (auto-injected by Vercel integration). Optional locally — rate limiting disables itself if unset. |
+| `KV_REST_API_TOKEN` | Vercel KV REST token. Optional locally. |
 
 ### Google OAuth setup
 
@@ -89,6 +91,35 @@ crm.objects.custom.write
 ```
 
 > **Important:** There is no `crm.objects.associations.write` scope — it does not exist in HubSpot. Associations are covered by the object write scopes above. Adding a non-existent scope will silently fail and the key will work, but keep the list clean.
+
+---
+
+## Rate limiting
+
+`POST /api/referrals` is rate-limited to prevent any single signed-in user (or a
+compromised session) from flooding HubSpot.
+
+| Bucket | Limit |
+|---|---|
+| Per user, per minute | 10 |
+| Per user, per hour | 100 |
+| Per IP, per minute | 30 |
+| Per IP, per hour | 300 |
+
+Backed by Vercel KV (Upstash Redis) using sliding-window counters. On a 429, the
+form shows a countdown and re-enables the submit button automatically.
+
+If `KV_REST_API_URL` / `KV_REST_API_TOKEN` are unset (typical for local dev),
+rate limiting is disabled with a startup log and the app runs unchanged.
+
+If Redis is unreachable in production, the limiter **fails open** — the request
+goes through and the error is logged. The auth gate remains the primary defense.
+
+### Setup (production)
+
+1. Vercel dashboard → Storage → Create Database → KV
+2. Connect the store to the `az-partner-referrals` project
+3. Redeploy — `KV_REST_API_URL` and `KV_REST_API_TOKEN` are injected automatically
 
 ---
 
