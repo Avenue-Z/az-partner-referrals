@@ -324,6 +324,34 @@ export async function getOwnerIdByEmail(email: string): Promise<string | undefin
   }
 }
 
+/**
+ * Resolve the HubSpot owner ID for a referral submitter, with env-var fallback.
+ *
+ * Returns the submitter's owner ID when they are a provisioned HubSpot user.
+ * Falls back to HUBSPOT_DEFAULT_OWNER_EMAIL when the submitter has no HubSpot
+ * owner — this prevents records from being created ownerless when an Avenue Z
+ * teammate logs in via Google but is not yet set up as a HubSpot user.
+ */
+export async function resolveSubmitterOwnerId(submitterEmail: string): Promise<string | undefined> {
+  const direct = await getOwnerIdByEmail(submitterEmail)
+  if (direct) return direct
+
+  const fallbackEmail = process.env.HUBSPOT_DEFAULT_OWNER_EMAIL
+  if (!fallbackEmail) {
+    console.warn(`[resolveSubmitterOwnerId] No HubSpot owner for ${submitterEmail} and HUBSPOT_DEFAULT_OWNER_EMAIL is unset — record will be unassigned.`)
+    return undefined
+  }
+
+  const fallback = await getOwnerIdByEmail(fallbackEmail)
+  if (!fallback) {
+    console.warn(`[resolveSubmitterOwnerId] No HubSpot owner for ${submitterEmail} or fallback ${fallbackEmail} — record will be unassigned.`)
+    return undefined
+  }
+
+  console.warn(`[resolveSubmitterOwnerId] ${submitterEmail} has no HubSpot owner — falling back to ${fallbackEmail} (id=${fallback}).`)
+  return fallback
+}
+
 // ── Association type discovery ────────────────────────────────────────────────
 
 type AssocSpec = { associationCategory: 'HUBSPOT_DEFINED' | 'USER_DEFINED'; associationTypeId: number }
@@ -442,8 +470,8 @@ export type ReferralResult = {
 export async function logReferral(payload: ReferralPayload): Promise<ReferralResult> {
   const hs = getHubSpotClient()
 
-  // 1. Resolve submitter's owner ID
-  const ownerId = await getOwnerIdByEmail(payload.submitterEmail)
+  // 1. Resolve submitter's owner ID (with env-var fallback)
+  const ownerId = await resolveSubmitterOwnerId(payload.submitterEmail)
 
   // 2. Upsert contact
   let contactId: string
@@ -458,13 +486,14 @@ export async function logReferral(payload: ReferralPayload): Promise<ReferralRes
       })
     }
   } else {
-    // New contact: create with full props and assign to submitter
-    const newContactProps: Record<string, string> = {
+    // Form didn't match a contact; search server-side to avoid duplicates.
+    // If a hit comes back, treat the record as existing — never silently
+    // reassign its owner (owner is only included on the create path).
+    const baseContactProps: Record<string, string> = {
       firstname: payload.firstName,
       lastname:  payload.lastName,
       email:     payload.email,
       company:   payload.companyName,
-      ...(ownerId ? { hubspot_owner_id: ownerId } : {}),
     }
     const search = await hs.crm.contacts.searchApi.doSearch({
       filterGroups: [{ filters: [{ propertyName: 'email', operator: 'EQ' as any, value: payload.email }] }],
@@ -472,9 +501,11 @@ export async function logReferral(payload: ReferralPayload): Promise<ReferralRes
     })
     if (search.total > 0) {
       contactId = search.results[0].id
-      await hs.crm.contacts.basicApi.update(contactId, { properties: newContactProps })
+      await hs.crm.contacts.basicApi.update(contactId, { properties: baseContactProps })
     } else {
-      const created = await hs.crm.contacts.basicApi.create({ properties: newContactProps })
+      const created = await hs.crm.contacts.basicApi.create({
+        properties: { ...baseContactProps, ...(ownerId ? { hubspot_owner_id: ownerId } : {}) },
+      })
       contactId = created.id
     }
   }
@@ -482,11 +513,13 @@ export async function logReferral(payload: ReferralPayload): Promise<ReferralRes
   // 3. Upsert company
   let companyId: string
 
-  // Referral tracking fields — always written, on both new and existing companies
+  // Referral tracking fields — always written, on both new and existing companies.
+  // referral_process must be written even when notes is empty, otherwise stale
+  // notes from a prior referral persist on the company record.
   const referralProps: Record<string, string> = {
     referred_to_partner: 'Yes',
     referred_to:         payload.partnerNames.join(', '),
-    ...(payload.notes ? { referral_process: payload.notes } : {}),
+    referral_process:    payload.notes ?? '',
   }
 
   if (payload.existingCompanyId) {
@@ -500,12 +533,13 @@ export async function logReferral(payload: ReferralPayload): Promise<ReferralRes
       },
     })
   } else {
-    // New company: create with full identity props + referral fields + owner
-    const newCompanyProps: Record<string, string> = {
+    // Form didn't match a company; search server-side to avoid duplicates.
+    // If a hit comes back, treat the record as existing — write referral
+    // fields only, and never silently reassign the owner.
+    const baseCompanyProps: Record<string, string> = {
       name: payload.companyName,
       ...(payload.companyDomain ? { domain: payload.companyDomain } : {}),
       ...referralProps,
-      ...(ownerId ? { hubspot_owner_id: ownerId } : {}),
     }
     const domainFilter = payload.companyDomain
       ? [{ propertyName: 'domain', operator: 'EQ' as any, value: payload.companyDomain }]
@@ -517,9 +551,11 @@ export async function logReferral(payload: ReferralPayload): Promise<ReferralRes
     })
     if (search.total > 0) {
       companyId = search.results[0].id
-      await hs.crm.companies.basicApi.update(companyId, { properties: newCompanyProps })
+      await hs.crm.companies.basicApi.update(companyId, { properties: baseCompanyProps })
     } else {
-      const created = await hs.crm.companies.basicApi.create({ properties: newCompanyProps })
+      const created = await hs.crm.companies.basicApi.create({
+        properties: { ...baseCompanyProps, ...(ownerId ? { hubspot_owner_id: ownerId } : {}) },
+      })
       companyId = created.id
     }
   }
