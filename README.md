@@ -63,6 +63,7 @@ npm run dev        # starts on http://localhost:3002
 | `AUTH_GOOGLE_ID` | OAuth 2.0 Client ID from Google Cloud Console |
 | `AUTH_GOOGLE_SECRET` | OAuth 2.0 Client Secret from Google Cloud Console |
 | `HUBSPOT_ACCESS_TOKEN` | HubSpot Service Key (see below) |
+| `HUBSPOT_DEFAULT_OWNER_EMAIL` | Fallback HubSpot owner email used when the submitter is not provisioned as a HubSpot user (e.g. `nick.osler@avenuez.com`) |
 | `NEXTAUTH_URL` | Full base URL of the app (e.g. `http://localhost:3002`) |
 
 ### Google OAuth setup

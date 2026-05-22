@@ -75,12 +75,14 @@ const companyId = (contact.associations as any)?.companies?.results?.[0]?.id
 
 | Scenario | Owner behavior |
 |---|---|
-| New contact created | Always assigned to submitter |
-| New company created | Always assigned to submitter |
+| New contact created | Assigned to submitter, else `HUBSPOT_DEFAULT_OWNER_EMAIL`, else unassigned |
+| New company created | Assigned to submitter, else `HUBSPOT_DEFAULT_OWNER_EMAIL`, else unassigned |
 | Existing contact updated | Owner unchanged UNLESS `reassignContactOwner: true` in payload |
 | Existing company updated | Owner unchanged UNLESS `reassignCompanyOwner: true` in payload |
 
 This is intentional — existing records already have AMs assigned. Don't overwrite silently.
+
+Owner resolution lives in `resolveSubmitterOwnerId` in `lib/hubspot/client.ts`. It tries the Google submitter email first, then falls back to `HUBSPOT_DEFAULT_OWNER_EMAIL`. Each step that doesn't resolve emits a `console.warn`.
 
 ## Environment variables
 
