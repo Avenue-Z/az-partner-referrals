@@ -46,9 +46,8 @@ export type PartnerFetchResult =
   | { ok: false; error: string }
 
 /**
- * Fetch all partners, excluding Individuals & Consultants.
- * NOTE: the Status filter is applied client-side once we know the exact HubSpot
- * property name for this portal's Partners custom object.
+ * Fetch active partners (tier = active), excluding Individuals & Consultants.
+ * The "Status" display label maps to the internal property name "tier".
  */
 export async function getActivePartners(): Promise<PartnerFetchResult> {
   let hs: Client
@@ -64,7 +63,11 @@ export async function getActivePartners(): Promise<PartnerFetchResult> {
   try {
     do {
       const res = await hs.crm.objects.searchApi.doSearch(PARTNERS_OBJECT_TYPE, {
-        filterGroups: [],   // no server-side filter — avoids 400 on unknown property names
+        filterGroups: [{
+          filters: [
+            { propertyName: 'tier', operator: 'EQ' as any, value: 'active' },
+          ],
+        }],
         properties: ['partner_name', 'company_type', 'service_offered'],
         sorts: ['partner_name'],
         limit: 200,
