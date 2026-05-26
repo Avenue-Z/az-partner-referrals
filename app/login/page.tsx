@@ -1,40 +1,38 @@
 import { signIn } from '@/auth'
-import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { AvenueZLogo } from '@/components/layout/avenue-z-logo'
 
 export default function LoginPage() {
   return (
-    <div className="min-h-screen flex items-center justify-center bg-black px-4">
-      <div className="w-full max-w-sm space-y-6">
-        <div className="text-center space-y-1">
-          <p className="text-xs font-bold tracking-[0.2em] uppercase text-[#60FDFF]">Avenue Z</p>
-          <h1 className="text-2xl font-bold text-white">Partner Referrals</h1>
+    <div className="flex min-h-screen flex-col items-center justify-center gap-6 bg-glow px-4">
+
+      {/* Card */}
+      <div className="w-full max-w-sm rounded-xl border border-white/[0.06] bg-bg-surface p-8">
+        <div className="mb-6 flex justify-center">
+          <AvenueZLogo height={22} className="text-white" />
         </div>
 
-        <Card className="bg-[#272727] border-white/8">
-          <CardHeader className="pb-4">
-            <CardTitle className="text-white text-lg">Sign in</CardTitle>
-            <CardDescription className="text-[#8A8A8A]">
-              Use your Avenue Z Google account to continue.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <form
-              action={async () => {
-                'use server'
-                await signIn('google', { redirectTo: '/referrals' })
-              }}
-            >
-              <Button
-                type="submit"
-                className="w-full bg-[#60FDFF] text-black font-bold hover:bg-[#60FDFF]/90"
-              >
-                Continue with Google
-              </Button>
-            </form>
-          </CardContent>
-        </Card>
+        <h1 className="mb-8 text-center text-xl font-extrabold text-white">
+          Partner Referrals
+        </h1>
+
+        <form
+          action={async () => {
+            'use server'
+            await signIn('google', { redirectTo: '/referrals' })
+          }}
+        >
+          <button
+            type="submit"
+            className="w-full rounded-full bg-white px-6 py-3 text-sm font-bold text-black transition-opacity hover:opacity-90"
+          >
+            Continue with Google
+          </button>
+        </form>
       </div>
+
+      <p className="text-center text-sm text-text-muted">
+        Restricted to @avenuez.com accounts
+      </p>
     </div>
   )
 }

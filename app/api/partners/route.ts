@@ -1,13 +1,13 @@
 import { NextResponse } from 'next/server'
 import { auth } from '@/auth'
-import { getTier1Partners } from '@/lib/hubspot/client'
+import { getActivePartners } from '@/lib/hubspot/client'
 
 export async function GET() {
   const session = await auth()
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   try {
-    const partners = await getTier1Partners()
+    const partners = await getActivePartners()
     return NextResponse.json(partners)
   } catch (err) {
     console.error('[/api/partners]', err)

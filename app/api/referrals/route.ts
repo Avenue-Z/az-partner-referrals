@@ -22,7 +22,7 @@ export async function POST(req: NextRequest) {
     partnerIds, partnerNames,
     existingContactId, existingCompanyId,
     reassignContactOwner, reassignCompanyOwner,
-    notes,
+    notes, mrr, monthlyOrderVolume,
   } = body as Record<string, unknown>
 
   if (
@@ -49,7 +49,9 @@ export async function POST(req: NextRequest) {
       reassignCompanyOwner: reassignCompanyOwner === true,
       partnerIds:   partnerIds   as string[],
       partnerNames: partnerNames as string[],
-      notes: typeof notes === 'string' ? notes : undefined,
+      notes:               typeof notes               === 'string' ? notes               : undefined,
+      mrr:                 typeof mrr                 === 'string' ? mrr                 : undefined,
+      monthlyOrderVolume:  typeof monthlyOrderVolume  === 'string' ? monthlyOrderVolume  : undefined,
       submitterEmail: session.user.email,
     })
 
