@@ -225,36 +225,36 @@ export function ReferralForm({ partners, partnerError, submitterName }: Props) {
     note?: string
   }) {
     return (
-      <div className="flex items-start gap-3 rounded-lg border border-[#60FDFF]/25 bg-[#60FDFF]/6 px-4 py-3">
-        <Icon className="size-4 shrink-0 text-[#60FDFF] mt-0.5" />
+      <div className="flex items-start gap-3 rounded-lg border border-brand-cyan/25 bg-brand-cyan/[0.06] px-4 py-3">
+        <Icon className="size-4 shrink-0 text-brand-cyan mt-0.5" />
         <div className="min-w-0 flex-1 space-y-1">
-          <p className="text-[10px] font-bold tracking-[0.18em] uppercase text-[#60FDFF]">{label}</p>
+          <p className="text-[10px] font-bold tracking-widest uppercase text-brand-cyan">{label}</p>
 
           {rows.filter((r) => r.value).map(({ key, value }) => (
-            <p key={key} className="text-sm text-[#8A8A8A]">
+            <p key={key} className="text-sm text-text-muted">
               {key}: <span className="text-white">{value}</span>
             </p>
           ))}
 
           {/* Owner row — three states: known, assigned-to-me, unknown */}
           {ownerName ? (
-            <p className="text-sm text-[#8A8A8A]">
+            <p className="text-sm text-text-muted">
               Owner: <span className="text-white">{ownerName}</span>
             </p>
           ) : assignedToMe ? (
-            <p className="text-sm text-[#8A8A8A]">
-              Owner: <span className="text-[#60FDFF]">You</span>
+            <p className="text-sm text-text-muted">
+              Owner: <span className="text-brand-cyan">You</span>
             </p>
           ) : (
             <div className="flex items-center gap-2 flex-wrap">
-              <p className="text-sm text-[#8A8A8A]">
-                Owner: <span className="text-[#8A8A8A]/50">Unknown</span>
+              <p className="text-sm text-text-muted">
+                Owner: <span className="text-text-muted/50">Unknown</span>
               </p>
               {onAssignToMe && (
                 <button
                   type="button"
                   onClick={onAssignToMe}
-                  className="text-xs text-[#60FDFF] underline underline-offset-2 hover:no-underline transition-all"
+                  className="text-xs text-brand-cyan underline underline-offset-2 hover:no-underline transition-all"
                 >
                   Assign to me
                 </button>
@@ -262,7 +262,7 @@ export function ReferralForm({ partners, partnerError, submitterName }: Props) {
             </div>
           )}
 
-          {note && <p className="text-xs text-[#60FDFF]/60 pt-0.5">{note}</p>}
+          {note && <p className="text-xs text-brand-cyan/60 pt-0.5">{note}</p>}
         </div>
       </div>
     )
@@ -277,10 +277,10 @@ export function ReferralForm({ partners, partnerError, submitterName }: Props) {
     note?: string
   }) {
     return (
-      <div className="flex items-start gap-3 rounded-lg border border-[#FFAB40]/25 bg-[#FFAB40]/6 px-4 py-3">
+      <div className="flex items-start gap-3 rounded-lg border border-[#FFAB40]/25 bg-[#FFAB40]/[0.06] px-4 py-3">
         <Icon className="size-4 shrink-0 text-[#FFAB40] mt-0.5" />
         <div className="space-y-0.5">
-          <p className="text-[10px] font-bold tracking-[0.18em] uppercase text-[#FFAB40]">{label}</p>
+          <p className="text-[10px] font-bold tracking-widest uppercase text-[#FFAB40]">{label}</p>
           {note && <p className="text-xs text-[#FFAB40]/70">{note}</p>}
         </div>
       </div>
@@ -288,14 +288,14 @@ export function ReferralForm({ partners, partnerError, submitterName }: Props) {
   }
 
   return (
-    <Card className="bg-[#272727] border-white/8">
+    <Card className="bg-bg-surface border-white/[0.06]">
       <CardHeader className="sr-only">
         <CardTitle>Log a Referral</CardTitle>
         <CardDescription>Submitting as {submitterName}</CardDescription>
       </CardHeader>
 
       {partnerError && (
-        <div className="mx-6 mb-2 flex items-start gap-2 rounded-lg border border-[#FF4444]/30 bg-[#FF4444]/8 px-4 py-3 text-sm text-[#FF4444]">
+        <div className="mx-6 mb-2 flex items-start gap-2 rounded-lg border border-destructive/30 bg-destructive/[0.08] px-4 py-3 text-sm text-destructive">
           <AlertCircle className="size-4 shrink-0 mt-0.5" />
           <div>
             <p className="font-semibold">HubSpot connection error</p>
@@ -309,12 +309,12 @@ export function ReferralForm({ partners, partnerError, submitterName }: Props) {
 
           {/* ── Lead Info ──────────────────────────────────────────────────── */}
           <div className="space-y-3">
-            <p className="text-xs font-bold tracking-[0.15em] uppercase text-[#8A8A8A]">Search for Contact</p>
+            <p className="text-xs font-bold tracking-widest uppercase text-text-muted">Search for Contact</p>
 
             {/* Email — always visible, drives everything */}
             <div className="space-y-1.5">
-              <Label htmlFor="email" className="text-white text-sm">
-                Email <span className="text-[#FF4444]">*</span>
+              <Label htmlFor="email" className="text-white text-sm font-semibold">
+                Email <span className="text-destructive">*</span>
               </Label>
               <div className="relative">
                 <Input
@@ -327,7 +327,7 @@ export function ReferralForm({ partners, partnerError, submitterName }: Props) {
                   }}
                   required
                   placeholder="jane@company.com"
-                  className="bg-[#1a1a1a] border-white/8 text-white placeholder:text-[#8A8A8A] focus-visible:ring-[#60FDFF] pr-8"
+                  className="bg-white/[0.04] border-white/[0.08] text-white placeholder:text-text-muted focus-visible:ring-0 focus-visible:border-white/20 pr-8"
                 />
                 {emailState === 'loading' && (
                   <Loader2 className="size-3.5 absolute right-2.5 top-1/2 -translate-y-1/2 text-[#8A8A8A] animate-spin" />
@@ -356,8 +356,8 @@ export function ReferralForm({ partners, partnerError, submitterName }: Props) {
                 <NewCard icon={UserPlus} label="New Contact" note="Will be created in HubSpot and assigned to you." />
                 <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-1.5">
-                    <Label htmlFor="firstName" className="text-white text-sm">
-                      First Name <span className="text-[#FF4444]">*</span>
+                    <Label htmlFor="firstName" className="text-white text-sm font-semibold">
+                      First Name <span className="text-destructive">*</span>
                     </Label>
                     <Input
                       id="firstName"
@@ -365,12 +365,12 @@ export function ReferralForm({ partners, partnerError, submitterName }: Props) {
                       onChange={(e) => setFirstName(e.target.value)}
                       required
                       placeholder="Jane"
-                      className="bg-[#1a1a1a] border-white/8 text-white placeholder:text-[#8A8A8A] focus-visible:ring-[#60FDFF]"
+                      className="bg-white/[0.04] border-white/[0.08] text-white placeholder:text-text-muted focus-visible:ring-0 focus-visible:border-white/20"
                     />
                   </div>
                   <div className="space-y-1.5">
-                    <Label htmlFor="lastName" className="text-white text-sm">
-                      Last Name <span className="text-[#FF4444]">*</span>
+                    <Label htmlFor="lastName" className="text-white text-sm font-semibold">
+                      Last Name <span className="text-destructive">*</span>
                     </Label>
                     <Input
                       id="lastName"
@@ -378,7 +378,7 @@ export function ReferralForm({ partners, partnerError, submitterName }: Props) {
                       onChange={(e) => setLastName(e.target.value)}
                       required
                       placeholder="Smith"
-                      className="bg-[#1a1a1a] border-white/8 text-white placeholder:text-[#8A8A8A] focus-visible:ring-[#60FDFF]"
+                      className="bg-white/[0.04] border-white/[0.08] text-white placeholder:text-text-muted focus-visible:ring-0 focus-visible:border-white/20"
                     />
                   </div>
                 </div>
@@ -409,7 +409,7 @@ export function ReferralForm({ partners, partnerError, submitterName }: Props) {
 
             {/* Company lookup spinner */}
             {companyState === 'loading' && (
-              <div className="flex items-center gap-2 text-xs text-[#8A8A8A]">
+              <div className="flex items-center gap-2 text-xs text-text-muted">
                 <Loader2 className="size-3 animate-spin" />
                 Looking up company…
               </div>
@@ -423,8 +423,8 @@ export function ReferralForm({ partners, partnerError, submitterName }: Props) {
                 )}
                 <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-1.5">
-                    <Label htmlFor="companyName" className="text-white text-sm">
-                      Company <span className="text-[#FF4444]">*</span>
+                    <Label htmlFor="companyName" className="text-white text-sm font-semibold">
+                      Company <span className="text-destructive">*</span>
                     </Label>
                     <Input
                       id="companyName"
@@ -435,11 +435,11 @@ export function ReferralForm({ partners, partnerError, submitterName }: Props) {
                       }}
                       required={needsCompany}
                       placeholder="Acme Corp"
-                      className="bg-[#1a1a1a] border-white/8 text-white placeholder:text-[#8A8A8A] focus-visible:ring-[#60FDFF]"
+                      className="bg-white/[0.04] border-white/[0.08] text-white placeholder:text-text-muted focus-visible:ring-0 focus-visible:border-white/20"
                     />
                   </div>
                   <div className="space-y-1.5">
-                    <Label htmlFor="companyDomain" className="text-white text-sm">Website</Label>
+                    <Label htmlFor="companyDomain" className="text-white text-sm font-semibold">Website</Label>
                     <div className="relative">
                       <Input
                         id="companyDomain"
@@ -449,7 +449,7 @@ export function ReferralForm({ partners, partnerError, submitterName }: Props) {
                           triggerCompanyLookup(e.target.value, companyName)
                         }}
                         placeholder="acme.com"
-                        className="bg-[#1a1a1a] border-white/8 text-white placeholder:text-[#8A8A8A] focus-visible:ring-[#60FDFF] pr-8"
+                        className="bg-white/[0.04] border-white/[0.08] text-white placeholder:text-text-muted focus-visible:ring-0 focus-visible:border-white/20 pr-8"
                       />
                       {companyState === 'loading' && (
                         <Loader2 className="size-3.5 absolute right-2.5 top-1/2 -translate-y-1/2 text-[#8A8A8A] animate-spin" />
@@ -464,8 +464,8 @@ export function ReferralForm({ partners, partnerError, submitterName }: Props) {
           {/* ── Partner Selection (only shown once we know who the lead is) ─── */}
           {(contactKnown || needsName) && (
             <div className="space-y-3">
-              <p className="text-xs font-bold tracking-[0.15em] uppercase text-[#8A8A8A]">
-                Select Partners to Attribute <span className="text-[#FF4444]">*</span>
+              <p className="text-xs font-bold tracking-widest uppercase text-text-muted">
+                Select Partners to Attribute <span className="text-destructive">*</span>
               </p>
               <PartnerPicker
                 partners={partners}
@@ -478,27 +478,27 @@ export function ReferralForm({ partners, partnerError, submitterName }: Props) {
           {/* ── Notes ──────────────────────────────────────────────────────── */}
           {(contactKnown || needsName) && (
             <div className="space-y-1.5">
-              <Label htmlFor="notes" className="text-white text-sm">Notes</Label>
+              <Label htmlFor="notes" className="text-white text-sm font-semibold">Notes</Label>
               <Textarea
                 id="notes"
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
                 placeholder="Context about this lead or referral…"
                 rows={3}
-                className="bg-[#1a1a1a] border-white/8 text-white placeholder:text-[#8A8A8A] focus-visible:ring-[#60FDFF] resize-none"
+                className="bg-white/[0.04] border-white/[0.08] text-white placeholder:text-text-muted focus-visible:ring-0 focus-visible:border-white/20 resize-none"
               />
             </div>
           )}
 
           {/* ── Status feedback ─────────────────────────────────────────────── */}
           {submitState === 'success' && (
-            <div className="flex items-center gap-2 text-[#60FF80] text-sm">
+            <div className="flex items-center gap-2 text-brand-green text-sm font-semibold">
               <CheckCircle className="size-4 shrink-0" />
               Referral logged successfully in HubSpot.
             </div>
           )}
           {submitState === 'error' && (
-            <div className="flex items-center gap-2 text-[#FF4444] text-sm">
+            <div className="flex items-center gap-2 text-destructive text-sm font-semibold">
               <AlertCircle className="size-4 shrink-0" />
               {errorMsg}
             </div>
@@ -509,7 +509,7 @@ export function ReferralForm({ partners, partnerError, submitterName }: Props) {
             <Button
               type="submit"
               disabled={submitState === 'loading' || !canSubmit}
-              className="w-full bg-[#60FDFF] text-black font-bold hover:bg-[#60FDFF]/90 disabled:opacity-40"
+              className="w-full rounded-full bg-white text-black font-bold text-sm transition-opacity hover:opacity-90 disabled:opacity-40"
             >
               {submitState === 'loading' ? (
                 <><Loader2 className="size-4 mr-2 animate-spin" /> Logging Referral…</>

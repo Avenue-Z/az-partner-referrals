@@ -3,8 +3,7 @@ import { signOut } from '@/auth'
 import { getTier1Partners, getReferralLog } from '@/lib/hubspot/client'
 import { ReferralForm } from '@/components/referral-form'
 import { ReferralLog } from '@/components/referral-log'
-import { Button } from '@/components/ui/button'
-import { Separator } from '@/components/ui/separator'
+import { AvenueZLogo } from '@/components/layout/avenue-z-logo'
 import { LogOut } from 'lucide-react'
 
 export const dynamic = 'force-dynamic'
@@ -19,32 +18,26 @@ export default async function ReferralsPage() {
   const userName = session?.user?.name ?? session?.user?.email ?? 'Unknown'
 
   return (
-    <div className="min-h-screen bg-black">
+    <div className="min-h-screen">
       {/* Header */}
-      <header className="border-b border-white/8 px-6 py-4">
+      <header className="border-b border-white/[0.06] px-6 py-4">
         <div className="max-w-5xl mx-auto flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <span className="text-xs font-bold tracking-[0.2em] uppercase text-[#60FDFF]">Avenue Z</span>
-            <Separator orientation="vertical" className="h-4 bg-white/20" />
-            <span className="text-white font-semibold text-sm">Partner Referrals</span>
-          </div>
+          <AvenueZLogo height={20} className="text-white" />
           <div className="flex items-center gap-4">
-            <span className="text-[#8A8A8A] text-sm hidden sm:block">{session?.user?.email}</span>
+            <span className="text-text-muted text-sm hidden sm:block">{session?.user?.email}</span>
             <form
               action={async () => {
                 'use server'
                 await signOut({ redirectTo: '/login' })
               }}
             >
-              <Button
+              <button
                 type="submit"
-                variant="ghost"
-                size="sm"
-                className="text-[#8A8A8A] hover:text-white hover:bg-white/8 gap-1.5"
+                className="flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-semibold text-text-muted transition-colors hover:bg-white/[0.04] hover:text-white"
               >
                 <LogOut className="size-3.5" />
                 Sign out
-              </Button>
+              </button>
             </form>
           </div>
         </div>
@@ -53,22 +46,24 @@ export default async function ReferralsPage() {
       {/* Main content */}
       <main className="max-w-5xl mx-auto px-6 py-8 space-y-8">
         <div>
-          <h1 className="text-2xl font-bold text-white">Log a Partner Referral</h1>
-          <ul className="mt-3 space-y-1.5 text-sm text-[#8A8A8A]">
+          <p className="text-sm font-bold uppercase tracking-widest text-text-muted mb-2">Avenue Z</p>
+          <h1 className="text-4xl font-extrabold uppercase text-white">Partner Referrals</h1>
+          <div className="divider-full mt-4 mb-5" />
+          <ul className="space-y-1.5 text-sm text-text-muted">
             <li className="flex items-start gap-2">
-              <span className="mt-1.5 size-1 shrink-0 rounded-full bg-[#8A8A8A]" />
+              <span className="mt-1.5 size-1 shrink-0 rounded-full bg-text-muted" />
               Use the form below to attribute a contact to a Partner record in HubSpot.
             </li>
             <li className="flex items-start gap-2">
-              <span className="mt-1.5 size-1 shrink-0 rounded-full bg-[#8A8A8A]" />
+              <span className="mt-1.5 size-1 shrink-0 rounded-full bg-text-muted" />
               This will log the Contact record to the Partner object for tracking.
             </li>
             <li className="flex items-start gap-2">
-              <span className="mt-1.5 size-1 shrink-0 rounded-full bg-[#8A8A8A]" />
+              <span className="mt-1.5 size-1 shrink-0 rounded-full bg-text-muted" />
               You will still need to submit the Partner&apos;s referral form or reach out to them directly.
             </li>
             <li className="flex items-start gap-2">
-              <span className="mt-1.5 size-1 shrink-0 rounded-full bg-[#8A8A8A]" />
+              <span className="mt-1.5 size-1 shrink-0 rounded-full bg-text-muted" />
               All stakeholders will receive an email notification upon submission.
             </li>
           </ul>
