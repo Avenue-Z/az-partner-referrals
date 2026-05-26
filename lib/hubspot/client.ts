@@ -45,7 +45,11 @@ export type PartnerFetchResult =
   | { ok: true; partners: PartnerCompany[] }
   | { ok: false; error: string }
 
-/** Fetch all active partners (Status = Active, excluding Individuals & Consultants). */
+/**
+ * Fetch all partners, excluding Individuals & Consultants.
+ * NOTE: the Status filter is applied client-side once we know the exact HubSpot
+ * property name for this portal's Partners custom object.
+ */
 export async function getActivePartners(): Promise<PartnerFetchResult> {
   let hs: Client
   try {
@@ -60,12 +64,7 @@ export async function getActivePartners(): Promise<PartnerFetchResult> {
   try {
     do {
       const res = await hs.crm.objects.searchApi.doSearch(PARTNERS_OBJECT_TYPE, {
-        filterGroups: [{
-          filters: [
-            { propertyName: 'status',       operator: 'EQ'  as any, value: 'active' },
-            { propertyName: 'company_type', operator: 'NEQ' as any, value: 'individuals_consultations' },
-          ],
-        }],
+        filterGroups: [],   // no server-side filter — avoids 400 on unknown property names
         properties: ['partner_name', 'company_type', 'service_offered'],
         sorts: ['partner_name'],
         limit: 200,
@@ -75,7 +74,8 @@ export async function getActivePartners(): Promise<PartnerFetchResult> {
       for (const c of res.results ?? []) {
         const p = c.properties as Record<string, string | null>
         const name = p.partner_name
-        if (name) partners.push({
+        // Exclude individuals & consultants client-side
+        if (name && p.company_type !== 'individuals_consultations') partners.push({
           id: c.id,
           name,
           companyType: p.company_type ?? null,
