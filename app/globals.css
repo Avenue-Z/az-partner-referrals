@@ -75,8 +75,61 @@
     @apply border-border outline-ring/50;
   }
   body {
-    @apply bg-background text-foreground;
-    font-family: 'Nunito Sans', sans-serif;
-    -webkit-font-smoothing: antialiased;
+    @apply bg-background text-foreground font-sans antialiased;
   }
 }
+
+/* ============================================================
+   Brand Utilities
+   ============================================================ */
+
+/* Page background glow — subtle atmosphere */
+.bg-glow {
+  background:
+    #000000
+    radial-gradient(ellipse 60% 40% at 90% 100%, rgba(0, 60, 60, 0.5) 0%, transparent 70%)
+    radial-gradient(ellipse 40% 30% at 80% 100%, rgba(30, 0, 80, 0.4) 0%, transparent 60%);
+}
+
+/* Gradient text — use on bold display headings */
+.gradient-text-full {
+  background: linear-gradient(135deg, #FFFC60, #60FF80, #60FDFF, #39A0FF, #6034FF);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.gradient-text-revenue {
+  background: linear-gradient(135deg, #FFFC60, #60FF80, #60FDFF);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* Gradient divider lines */
+.divider-full {
+  height: 1px;
+  background: linear-gradient(90deg, #FFFC60, #60FF80, #60FDFF, #39A0FF, #6034FF);
+}
+
+/* Glow bar accent */
+.glow-bar {
+  height: 6px;
+  border-radius: 100px;
+  background: linear-gradient(90deg, #FFFC60, #60FF80, #60FDFF, #39A0FF, #6034FF);
+  filter: blur(10px);
+  opacity: 0.6;
+}
+
+/* Dark scrollbar */
+.scrollbar-dark {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.1) transparent;
+}
+.scrollbar-dark::-webkit-scrollbar { width: 4px; }
+.scrollbar-dark::-webkit-scrollbar-track { background: transparent; }
+.scrollbar-dark::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 100px;
+}
+.scrollbar-dark::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, 0.2); }
