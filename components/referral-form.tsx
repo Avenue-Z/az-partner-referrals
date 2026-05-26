@@ -34,6 +34,8 @@ export function ReferralForm({ partners, partnerError, submitterName }: Props) {
   const [companyName,   setCompanyName]   = useState('')
   const [companyDomain, setCompanyDomain] = useState('')
   const [notes,         setNotes]         = useState('')
+  const [mrr,           setMrr]           = useState('')
+  const [monthlyOrderVolume, setMonthlyOrderVolume] = useState('')
 
   // ── Lookup state ─────────────────────────────────────────────────────────────
   const [emailState,    setEmailState]    = useState<EmailState>('idle')
@@ -71,6 +73,8 @@ export function ReferralForm({ partners, partnerError, submitterName }: Props) {
     setLastName('')
     setCompanyName('')
     setCompanyDomain('')
+    setMrr('')
+    setMonthlyOrderVolume('')
 
     if (!val.includes('@') || !val.includes('.')) return
 
@@ -183,6 +187,8 @@ export function ReferralForm({ partners, partnerError, submitterName }: Props) {
           partnerIds:           selectedPartnerIds,
           partnerNames:         selectedPartners.map((p) => p.name),
           notes:                notes || undefined,
+          mrr:                  mrr || undefined,
+          monthlyOrderVolume:   monthlyOrderVolume || undefined,
         }),
       })
 
@@ -195,6 +201,7 @@ export function ReferralForm({ partners, partnerError, submitterName }: Props) {
       // Reset everything
       setEmail('');         setFirstName('');    setLastName('')
       setCompanyName('');   setCompanyDomain(''); setNotes('')
+      setMrr('');           setMonthlyOrderVolume('')
       setEmailState('idle'); setCompanyState('idle')
       setMatchedContact(null); setMatchedCompany(null)
       setAssignContactToMe(false); setAssignCompanyToMe(false)
@@ -472,6 +479,44 @@ export function ReferralForm({ partners, partnerError, submitterName }: Props) {
                 selected={selectedPartnerIds}
                 onChange={setSelectedPartnerIds}
               />
+            </div>
+          )}
+
+          {/* ── Deal metrics ────────────────────────────────────────────── */}
+          {(contactKnown || needsName) && (
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="mrr" className="text-white text-sm">MRR</Label>
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[#8A8A8A] text-sm select-none">$</span>
+                  <Input
+                    id="mrr"
+                    type="number"
+                    min="0"
+                    step="1"
+                    value={mrr}
+                    onChange={(e) => setMrr(e.target.value)}
+                    placeholder="0"
+                    className="bg-[#1a1a1a] border-white/8 text-white placeholder:text-[#8A8A8A] focus-visible:ring-[#60FDFF] pl-6"
+                  />
+                </div>
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="monthlyOrderVolume" className="text-white text-sm">Monthly Order Volume</Label>
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[#8A8A8A] text-sm select-none">$</span>
+                  <Input
+                    id="monthlyOrderVolume"
+                    type="number"
+                    min="0"
+                    step="1"
+                    value={monthlyOrderVolume}
+                    onChange={(e) => setMonthlyOrderVolume(e.target.value)}
+                    placeholder="0"
+                    className="bg-[#1a1a1a] border-white/8 text-white placeholder:text-[#8A8A8A] focus-visible:ring-[#60FDFF] pl-6"
+                  />
+                </div>
+              </div>
             </div>
           )}
 

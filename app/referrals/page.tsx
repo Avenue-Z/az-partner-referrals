@@ -1,6 +1,6 @@
 import { auth } from '@/auth'
 import { signOut } from '@/auth'
-import { getTier1Partners, getReferralLog } from '@/lib/hubspot/client'
+import { getActivePartners, getReferralLog } from '@/lib/hubspot/client'
 import { ReferralForm } from '@/components/referral-form'
 import { ReferralLog } from '@/components/referral-log'
 import { Button } from '@/components/ui/button'
@@ -12,7 +12,7 @@ export const dynamic = 'force-dynamic'
 export default async function ReferralsPage() {
   const [session, partnerResult, log] = await Promise.all([
     auth(),
-    getTier1Partners(),
+    getActivePartners(),
     getReferralLog(),
   ])
 

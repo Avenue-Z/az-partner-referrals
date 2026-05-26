@@ -29,7 +29,6 @@ export const COMPANY_TYPE_LABELS: Record<string, string> = {
   payments_finance:            'Payments & Finance',
   logistics_fulfillment:       'Logistics & Fulfillment',
   creative_influencer_services:'Creative & Influencer',
-  individuals_consultations:   'Individuals & Consultants',
 }
 
 // Display order for categories in the picker
@@ -40,15 +39,14 @@ export const COMPANY_TYPE_ORDER = [
   'payments_finance',
   'logistics_fulfillment',
   'creative_influencer_services',
-  'individuals_consultations',
 ]
 
 export type PartnerFetchResult =
   | { ok: true; partners: PartnerCompany[] }
   | { ok: false; error: string }
 
-/** Fetch all Tier 1 partners from the custom partners object, paginating until exhausted. */
-export async function getTier1Partners(): Promise<PartnerFetchResult> {
+/** Fetch all active partners (Status = Active, excluding Individuals & Consultants). */
+export async function getActivePartners(): Promise<PartnerFetchResult> {
   let hs: Client
   try {
     hs = getHubSpotClient()
@@ -64,7 +62,8 @@ export async function getTier1Partners(): Promise<PartnerFetchResult> {
       const res = await hs.crm.objects.searchApi.doSearch(PARTNERS_OBJECT_TYPE, {
         filterGroups: [{
           filters: [
-            { propertyName: 'tier', operator: 'EQ' as any, value: 'tier_1' },
+            { propertyName: 'status',       operator: 'EQ'  as any, value: 'active' },
+            { propertyName: 'company_type', operator: 'NEQ' as any, value: 'individuals_consultations' },
           ],
         }],
         properties: ['partner_name', 'company_type', 'service_offered'],
@@ -458,6 +457,10 @@ export type ReferralPayload = {
   partnerIds: string[]
   partnerNames: string[]
   notes?: string
+  /** Monthly Recurring Revenue in dollars (stored as a number string in HubSpot) */
+  mrr?: string
+  /** Monthly Order Volume in dollars */
+  monthlyOrderVolume?: string
   submitterEmail: string
 }
 
@@ -520,6 +523,8 @@ export async function logReferral(payload: ReferralPayload): Promise<ReferralRes
     referred_to_partner: 'Yes',
     referred_to:         payload.partnerNames.join(', '),
     referral_process:    payload.notes ?? '',
+    ...(payload.mrr               ? { monthlyrecurringrevenue: payload.mrr }               : {}),
+    ...(payload.monthlyOrderVolume ? { monthly_order_volume:    payload.monthlyOrderVolume } : {}),
   }
 
   if (payload.existingCompanyId) {
