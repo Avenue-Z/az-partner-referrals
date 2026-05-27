@@ -36,7 +36,6 @@ export function ReferralForm({ partners, partnerError, submitterName }: Props) {
   const [notes,         setNotes]         = useState('')
   const [mrr,           setMrr]           = useState('')
   const [monthlyOrderVolume, setMonthlyOrderVolume] = useState('')
-  const [referralLink,  setReferralLink]  = useState('')
 
   // ── Lookup state ─────────────────────────────────────────────────────────────
   const [emailState,    setEmailState]    = useState<EmailState>('idle')
@@ -76,7 +75,6 @@ export function ReferralForm({ partners, partnerError, submitterName }: Props) {
     setCompanyDomain('')
     setMrr('')
     setMonthlyOrderVolume('')
-    setReferralLink('')
 
     if (!val.includes('@') || !val.includes('.')) return
 
@@ -191,7 +189,6 @@ export function ReferralForm({ partners, partnerError, submitterName }: Props) {
           notes:                notes || undefined,
           mrr:                  mrr || undefined,
           monthlyOrderVolume:   monthlyOrderVolume || undefined,
-          referralLink:         referralLink || undefined,
         }),
       })
 
@@ -204,7 +201,7 @@ export function ReferralForm({ partners, partnerError, submitterName }: Props) {
       // Reset everything
       setEmail('');         setFirstName('');    setLastName('')
       setCompanyName('');   setCompanyDomain(''); setNotes('')
-      setMrr('');           setMonthlyOrderVolume('');  setReferralLink('')
+      setMrr('');           setMonthlyOrderVolume('')
       setEmailState('idle'); setCompanyState('idle')
       setMatchedContact(null); setMatchedCompany(null)
       setAssignContactToMe(false); setAssignCompanyToMe(false)
@@ -482,26 +479,6 @@ export function ReferralForm({ partners, partnerError, submitterName }: Props) {
                 selected={selectedPartnerIds}
                 onChange={setSelectedPartnerIds}
               />
-            </div>
-          )}
-
-          {/* ── Referral Link ───────────────────────────────────────────── */}
-          {(contactKnown || needsName) && (
-            <div className="space-y-1.5">
-              <Label htmlFor="referralLink" className="text-white text-sm font-semibold">
-                Referral Link
-              </Label>
-              <Input
-                id="referralLink"
-                type="url"
-                value={referralLink}
-                onChange={(e) => setReferralLink(e.target.value)}
-                placeholder="https://partner.com/refer"
-                className="bg-white/[0.04] border-white/[0.08] text-white placeholder:text-text-muted focus-visible:ring-0 focus-visible:border-white/20"
-              />
-              <p className="text-xs text-text-muted">
-                If no link is available, the Slack notification will prompt the team to reach out to the partner directly.
-              </p>
             </div>
           )}
 

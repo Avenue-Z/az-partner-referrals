@@ -23,7 +23,7 @@ export async function POST(req: NextRequest) {
     partnerIds, partnerNames,
     existingContactId, existingCompanyId,
     reassignContactOwner, reassignCompanyOwner,
-    notes, mrr, monthlyOrderVolume, referralLink,
+    notes, mrr, monthlyOrderVolume,
   } = body as Record<string, unknown>
 
   if (
@@ -38,7 +38,7 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const { contactId, companyId } = await logReferral({
+    const { contactId, companyId, partnerReferralLinks } = await logReferral({
       firstName,
       lastName,
       email,
@@ -53,7 +53,6 @@ export async function POST(req: NextRequest) {
       notes:               typeof notes               === 'string' ? notes               : undefined,
       mrr:                 typeof mrr                 === 'string' ? mrr                 : undefined,
       monthlyOrderVolume:  typeof monthlyOrderVolume  === 'string' ? monthlyOrderVolume  : undefined,
-      referralLink:        typeof referralLink        === 'string' ? referralLink        : undefined,
       submitterEmail: session.user.email,
     })
 
@@ -80,14 +79,15 @@ export async function POST(req: NextRequest) {
       contactName,
       contactEmail: email,
       companyName,
-      companyDomain:       resolvedDomain,
-      partnerNames:        partnerNames as string[],
-      notes:               typeof notes               === 'string' ? notes               : undefined,
-      mrr:                 typeof mrr                 === 'string' ? mrr                 : undefined,
-      monthlyOrderVolume:  typeof monthlyOrderVolume  === 'string' ? monthlyOrderVolume  : undefined,
-      referralLink:        typeof referralLink        === 'string' ? referralLink        : undefined,
-      isNewContact:        typeof existingContactId   !== 'string',
-      isNewCompany:        typeof existingCompanyId   !== 'string',
+      companyDomain:        resolvedDomain,
+      partnerIds:           partnerIds as string[],
+      partnerNames:         partnerNames as string[],
+      partnerReferralLinks,
+      notes:                typeof notes               === 'string' ? notes               : undefined,
+      mrr:                  typeof mrr                 === 'string' ? mrr                 : undefined,
+      monthlyOrderVolume:   typeof monthlyOrderVolume  === 'string' ? monthlyOrderVolume  : undefined,
+      isNewContact:         typeof existingContactId   !== 'string',
+      isNewCompany:         typeof existingCompanyId   !== 'string',
     }).catch((err) => console.error('[/api/referrals] Slack notification failed:', err))
 
     return NextResponse.json({ ok: true })
