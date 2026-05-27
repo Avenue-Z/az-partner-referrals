@@ -528,7 +528,7 @@ export async function logReferral(payload: ReferralPayload): Promise<ReferralRes
     referred_to:         payload.partnerNames.join(', '),
     referral_process:    payload.notes ?? '',
     ...(payload.mrr                ? { monthly_recurring_revenue: payload.mrr }                : {}),
-    ...(payload.monthlyOrderVolume ? { monthly_order_value:       payload.monthlyOrderVolume } : {}),
+    ...(payload.monthlyOrderVolume ? { monthly_order_volume:      payload.monthlyOrderVolume } : {}),
   }
 
   if (payload.existingCompanyId) {
