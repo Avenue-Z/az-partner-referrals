@@ -486,13 +486,11 @@ export async function logReferral(payload: ReferralPayload): Promise<ReferralRes
   if (payload.existingContactId) {
     // Existing contact — record is already correct; only touch owner if user opted in.
     // Do NOT overwrite name, email, or the denormalised "company" text field.
-    // Always write monthly_order_volume when provided.
     contactId = payload.existingContactId
-    const existingContactUpdates: Record<string, string> = {}
-    if (payload.reassignContactOwner && ownerId) existingContactUpdates.hubspot_owner_id = ownerId
-    if (payload.monthlyOrderVolume) existingContactUpdates.monthly_order_volume = payload.monthlyOrderVolume
-    if (Object.keys(existingContactUpdates).length > 0) {
-      await hs.crm.contacts.basicApi.update(contactId, { properties: existingContactUpdates })
+    if (payload.reassignContactOwner && ownerId) {
+      await hs.crm.contacts.basicApi.update(contactId, {
+        properties: { hubspot_owner_id: ownerId },
+      })
     }
   } else {
     // Form didn't match a contact; search server-side to avoid duplicates.
@@ -503,7 +501,6 @@ export async function logReferral(payload: ReferralPayload): Promise<ReferralRes
       lastname:  payload.lastName,
       email:     payload.email,
       company:   payload.companyName,
-      ...(payload.monthlyOrderVolume ? { monthly_order_volume: payload.monthlyOrderVolume } : {}),
     }
     const search = await hs.crm.contacts.searchApi.doSearch({
       filterGroups: [{ filters: [{ propertyName: 'email', operator: 'EQ' as any, value: payload.email }] }],
@@ -530,8 +527,8 @@ export async function logReferral(payload: ReferralPayload): Promise<ReferralRes
     referred_to_partner: 'Yes',
     referred_to:         payload.partnerNames.join(', '),
     referral_process:    payload.notes ?? '',
-    // NOTE: monthlyrecurringrevenue is written separately below (best-effort)
-    // because the property may not exist in all portal tiers.
+    ...(payload.mrr                ? { monthly_recurring_revenue: payload.mrr }                : {}),
+    ...(payload.monthlyOrderVolume ? { monthly_order_value:       payload.monthlyOrderVolume } : {}),
   }
 
   if (payload.existingCompanyId) {
@@ -569,19 +566,6 @@ export async function logReferral(payload: ReferralPayload): Promise<ReferralRes
         properties: { ...baseCompanyProps, ...(ownerId ? { hubspot_owner_id: ownerId } : {}) },
       })
       companyId = created.id
-    }
-  }
-
-  // 3b. Best-effort MRR write — in a separate call so a missing property
-  //     never fails the whole referral (monthlyrecurringrevenue requires
-  //     Sales Hub Professional/Enterprise in some portals).
-  if (payload.mrr) {
-    try {
-      await hs.crm.companies.basicApi.update(companyId, {
-        properties: { monthlyrecurringrevenue: payload.mrr },
-      })
-    } catch (err) {
-      console.warn('[logReferral] MRR write skipped — property may not exist on this portal:', err)
     }
   }
 
