@@ -503,19 +503,16 @@ export function ReferralForm({ partners, partnerError, submitterName }: Props) {
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="monthlyOrderVolume" className="text-white text-sm font-semibold">Monthly Order Volume</Label>
-                <div className="relative">
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted text-sm select-none">$</span>
-                  <Input
-                    id="monthlyOrderVolume"
-                    type="number"
-                    min="0"
-                    step="1"
-                    value={monthlyOrderVolume}
-                    onChange={(e) => setMonthlyOrderVolume(e.target.value)}
-                    placeholder="0"
-                    className="bg-white/[0.04] border-white/[0.08] text-white placeholder:text-text-muted focus-visible:ring-0 focus-visible:border-white/20 pl-6"
-                  />
-                </div>
+                <Input
+                  id="monthlyOrderVolume"
+                  type="number"
+                  min="0"
+                  step="1"
+                  value={monthlyOrderVolume}
+                  onChange={(e) => setMonthlyOrderVolume(e.target.value)}
+                  placeholder="0"
+                  className="bg-white/[0.04] border-white/[0.08] text-white placeholder:text-text-muted focus-visible:ring-0 focus-visible:border-white/20"
+                />
               </div>
             </div>
           )}
