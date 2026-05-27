@@ -530,7 +530,8 @@ export async function logReferral(payload: ReferralPayload): Promise<ReferralRes
     referred_to_partner: 'Yes',
     referred_to:         payload.partnerNames.join(', '),
     referral_process:    payload.notes ?? '',
-    ...(payload.mrr ? { monthlyrecurringrevenue: payload.mrr } : {}),
+    // NOTE: monthlyrecurringrevenue is written separately below (best-effort)
+    // because the property may not exist in all portal tiers.
   }
 
   if (payload.existingCompanyId) {
@@ -568,6 +569,19 @@ export async function logReferral(payload: ReferralPayload): Promise<ReferralRes
         properties: { ...baseCompanyProps, ...(ownerId ? { hubspot_owner_id: ownerId } : {}) },
       })
       companyId = created.id
+    }
+  }
+
+  // 3b. Best-effort MRR write — in a separate call so a missing property
+  //     never fails the whole referral (monthlyrecurringrevenue requires
+  //     Sales Hub Professional/Enterprise in some portals).
+  if (payload.mrr) {
+    try {
+      await hs.crm.companies.basicApi.update(companyId, {
+        properties: { monthlyrecurringrevenue: payload.mrr },
+      })
+    } catch (err) {
+      console.warn('[logReferral] MRR write skipped — property may not exist on this portal:', err)
     }
   }
 
