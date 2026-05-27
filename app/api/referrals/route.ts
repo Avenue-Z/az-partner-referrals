@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/auth'
 import { logReferral } from '@/lib/hubspot/client'
 import { sendReferralNotification } from '@/lib/email/sendReferralNotification'
+import { sendSlackNotification } from '@/lib/slack/sendSlackNotification'
 
 export async function POST(req: NextRequest) {
   const session = await auth()
@@ -22,7 +23,7 @@ export async function POST(req: NextRequest) {
     partnerIds, partnerNames,
     existingContactId, existingCompanyId,
     reassignContactOwner, reassignCompanyOwner,
-    notes, mrr, monthlyOrderVolume,
+    notes, mrr, monthlyOrderVolume, referralLink,
   } = body as Record<string, unknown>
 
   if (
@@ -52,20 +53,42 @@ export async function POST(req: NextRequest) {
       notes:               typeof notes               === 'string' ? notes               : undefined,
       mrr:                 typeof mrr                 === 'string' ? mrr                 : undefined,
       monthlyOrderVolume:  typeof monthlyOrderVolume  === 'string' ? monthlyOrderVolume  : undefined,
+      referralLink:        typeof referralLink        === 'string' ? referralLink        : undefined,
       submitterEmail: session.user.email,
     })
 
-    // Fire notification emails — errors are logged but never fail the request
+    const contactName = `${firstName} ${lastName}`
+    const resolvedDomain = typeof companyDomain === 'string' ? companyDomain : undefined
+
+    // Fire email notifications — errors are logged but never fail the request
     sendReferralNotification({
       contactId,
       companyId,
       submitterEmail: session.user.email,
-      contactName: `${firstName} ${lastName}`,
+      contactName,
       contactEmail: email,
       companyName,
       partnerNames: partnerNames as string[],
       notes: typeof notes === 'string' ? notes : undefined,
-    }).catch((err) => console.error('[/api/referrals] notification failed:', err))
+    }).catch((err) => console.error('[/api/referrals] email notification failed:', err))
+
+    // Fire Slack notification — errors are logged but never fail the request
+    sendSlackNotification({
+      contactId,
+      companyId,
+      submitterEmail: session.user.email,
+      contactName,
+      contactEmail: email,
+      companyName,
+      companyDomain:       resolvedDomain,
+      partnerNames:        partnerNames as string[],
+      notes:               typeof notes               === 'string' ? notes               : undefined,
+      mrr:                 typeof mrr                 === 'string' ? mrr                 : undefined,
+      monthlyOrderVolume:  typeof monthlyOrderVolume  === 'string' ? monthlyOrderVolume  : undefined,
+      referralLink:        typeof referralLink        === 'string' ? referralLink        : undefined,
+      isNewContact:        typeof existingContactId   !== 'string',
+      isNewCompany:        typeof existingCompanyId   !== 'string',
+    }).catch((err) => console.error('[/api/referrals] Slack notification failed:', err))
 
     return NextResponse.json({ ok: true })
   } catch (err) {

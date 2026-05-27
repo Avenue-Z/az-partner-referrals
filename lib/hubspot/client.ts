@@ -461,8 +461,10 @@ export type ReferralPayload = {
   notes?: string
   /** Monthly Recurring Revenue in dollars (stored as a number string in HubSpot) */
   mrr?: string
-  /** Monthly Order Volume in dollars */
+  /** Monthly Order Volume */
   monthlyOrderVolume?: string
+  /** Partner referral tracking link */
+  referralLink?: string
   submitterEmail: string
 }
 
@@ -527,6 +529,7 @@ export async function logReferral(payload: ReferralPayload): Promise<ReferralRes
     referral_process:    payload.notes ?? '',
     ...(payload.mrr               ? { monthlyrecurringrevenue: payload.mrr }               : {}),
     ...(payload.monthlyOrderVolume ? { monthly_order_volume:    payload.monthlyOrderVolume } : {}),
+    ...(payload.referralLink       ? { referral_link:           payload.referralLink }       : {}),
   }
 
   if (payload.existingCompanyId) {
