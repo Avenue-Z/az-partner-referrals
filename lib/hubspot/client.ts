@@ -46,8 +46,9 @@ export type PartnerFetchResult =
   | { ok: false; error: string }
 
 /**
- * Fetch active partners (tier = active), excluding Individuals & Consultants.
- * The "Status" display label maps to the internal property name "tier".
+ * Fetch all partners with a partner_name, excluding Individuals & Consultants.
+ * TODO: once the correct enum value for "Active" on the tier property is confirmed
+ * from the logs, add back: { propertyName: 'tier', operator: 'EQ', value: '<value>' }
  */
 export async function getActivePartners(): Promise<PartnerFetchResult> {
   let hs: Client
@@ -63,12 +64,8 @@ export async function getActivePartners(): Promise<PartnerFetchResult> {
   try {
     do {
       const res = await hs.crm.objects.searchApi.doSearch(PARTNERS_OBJECT_TYPE, {
-        filterGroups: [{
-          filters: [
-            { propertyName: 'tier', operator: 'EQ' as any, value: 'active' },
-          ],
-        }],
-        properties: ['partner_name', 'company_type', 'service_offered'],
+        filterGroups: [],
+        properties: ['partner_name', 'company_type', 'service_offered', 'tier'],
         sorts: ['partner_name'],
         limit: 200,
         after: after ?? '0',
@@ -77,6 +74,8 @@ export async function getActivePartners(): Promise<PartnerFetchResult> {
       for (const c of res.results ?? []) {
         const p = c.properties as Record<string, string | null>
         const name = p.partner_name
+        // Log tier values so we can identify the correct "active" enum value
+        if (name) console.log(`[getActivePartners] partner="${name}" tier="${p.tier}" company_type="${p.company_type}"`)
         // Exclude individuals & consultants client-side
         if (name && p.company_type !== 'individuals_consultations') partners.push({
           id: c.id,
