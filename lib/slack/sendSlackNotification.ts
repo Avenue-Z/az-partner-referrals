@@ -10,11 +10,14 @@ export interface SlackReferralPayload {
   contactEmail: string
   companyName: string
   companyDomain?: string
+  /** Partner IDs in the same order as partnerNames */
+  partnerIds: string[]
   partnerNames: string[]
+  /** referral_link fetched from each Partner record — keyed by partner ID */
+  partnerReferralLinks: Record<string, string | null>
   mrr?: string
   monthlyOrderVolume?: string
   notes?: string
-  referralLink?: string
   isNewContact: boolean
   isNewCompany: boolean
 }
@@ -67,9 +70,15 @@ export async function sendSlackNotification(payload: SlackReferralPayload): Prom
     ? Number(payload.monthlyOrderVolume).toLocaleString('en-US')
     : null
 
-  const referralLinkText = payload.referralLink
-    ? `<${payload.referralLink}|${payload.referralLink}>`
-    : '_No link provided — reach out to the partner directly or fill out the contact us form on their website._'
+  // Build one line per partner: "• Partner Name: <link|link>" or fallback text
+  const referralLinkLines = payload.partnerIds.map((id, i) => {
+    const name = payload.partnerNames[i] ?? id
+    const link = payload.partnerReferralLinks[id]
+    return link
+      ? `• ${name}: <${link}|${link}>`
+      : `• ${name}: _No link on file — reach out directly or use their website contact form._`
+  })
+  const referralLinkText = referralLinkLines.join('\n')
 
   const blocks: object[] = [
     // ── Header ────────────────────────────────────────────────────────────────

@@ -463,14 +463,14 @@ export type ReferralPayload = {
   mrr?: string
   /** Monthly Order Volume */
   monthlyOrderVolume?: string
-  /** Partner referral tracking link */
-  referralLink?: string
   submitterEmail: string
 }
 
 export type ReferralResult = {
   contactId: string
   companyId: string
+  /** referral_link fetched from each Partner record after association — keyed by partner ID */
+  partnerReferralLinks: Record<string, string | null>
 }
 
 /** Upsert contact + company, set referral properties, and associate with selected partners. */
@@ -486,11 +486,13 @@ export async function logReferral(payload: ReferralPayload): Promise<ReferralRes
   if (payload.existingContactId) {
     // Existing contact — record is already correct; only touch owner if user opted in.
     // Do NOT overwrite name, email, or the denormalised "company" text field.
+    // Always write monthly_order_volume when provided.
     contactId = payload.existingContactId
-    if (payload.reassignContactOwner && ownerId) {
-      await hs.crm.contacts.basicApi.update(contactId, {
-        properties: { hubspot_owner_id: ownerId },
-      })
+    const existingContactUpdates: Record<string, string> = {}
+    if (payload.reassignContactOwner && ownerId) existingContactUpdates.hubspot_owner_id = ownerId
+    if (payload.monthlyOrderVolume) existingContactUpdates.monthly_order_volume = payload.monthlyOrderVolume
+    if (Object.keys(existingContactUpdates).length > 0) {
+      await hs.crm.contacts.basicApi.update(contactId, { properties: existingContactUpdates })
     }
   } else {
     // Form didn't match a contact; search server-side to avoid duplicates.
@@ -501,6 +503,7 @@ export async function logReferral(payload: ReferralPayload): Promise<ReferralRes
       lastname:  payload.lastName,
       email:     payload.email,
       company:   payload.companyName,
+      ...(payload.monthlyOrderVolume ? { monthly_order_volume: payload.monthlyOrderVolume } : {}),
     }
     const search = await hs.crm.contacts.searchApi.doSearch({
       filterGroups: [{ filters: [{ propertyName: 'email', operator: 'EQ' as any, value: payload.email }] }],
@@ -527,9 +530,7 @@ export async function logReferral(payload: ReferralPayload): Promise<ReferralRes
     referred_to_partner: 'Yes',
     referred_to:         payload.partnerNames.join(', '),
     referral_process:    payload.notes ?? '',
-    ...(payload.mrr               ? { monthlyrecurringrevenue: payload.mrr }               : {}),
-    ...(payload.monthlyOrderVolume ? { monthly_order_volume:    payload.monthlyOrderVolume } : {}),
-    ...(payload.referralLink       ? { referral_link:           payload.referralLink }       : {}),
+    ...(payload.mrr ? { monthlyrecurringrevenue: payload.mrr } : {}),
   }
 
   if (payload.existingCompanyId) {
@@ -605,5 +606,19 @@ export async function logReferral(payload: ReferralPayload): Promise<ReferralRes
     }
   }
 
-  return { contactId, companyId }
+  // 7. Fetch referral_link from each associated Partner record
+  const partnerReferralLinks: Record<string, string | null> = {}
+  for (const partnerId of payload.partnerIds) {
+    try {
+      const partner = await hs.crm.objects.basicApi.getById(
+        PARTNERS_OBJECT_TYPE, partnerId, ['referral_link'],
+      )
+      const pp = partner.properties as Record<string, string | null>
+      partnerReferralLinks[partnerId] = pp.referral_link ?? null
+    } catch {
+      partnerReferralLinks[partnerId] = null
+    }
+  }
+
+  return { contactId, companyId, partnerReferralLinks }
 }
