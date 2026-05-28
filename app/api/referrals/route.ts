@@ -26,23 +26,27 @@ export async function POST(req: NextRequest) {
     notes, mrr, monthlyOrderVolume,
   } = body as Record<string, unknown>
 
+  // firstName + lastName are only required when creating a new contact.
+  // When an existingContactId is provided the name fields are not shown
+  // and the contact may have no name stored in HubSpot — that's fine.
+  const isNewContact = typeof existingContactId !== 'string'
   if (
-    typeof firstName !== 'string' || !firstName ||
-    typeof lastName  !== 'string' || !lastName  ||
-    typeof email     !== 'string' || !email     ||
+    typeof email       !== 'string' || !email       ||
     typeof companyName !== 'string' || !companyName ||
     !Array.isArray(partnerIds)   || partnerIds.length   === 0 ||
-    !Array.isArray(partnerNames) || partnerNames.length === 0
+    !Array.isArray(partnerNames) || partnerNames.length === 0 ||
+    (isNewContact && (typeof firstName !== 'string' || !firstName ||
+                      typeof lastName  !== 'string' || !lastName))
   ) {
     return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
   }
 
   try {
     const { contactId, companyId, partnerReferralLinks } = await logReferral({
-      firstName,
-      lastName,
-      email,
-      companyName,
+      firstName:   typeof firstName   === 'string' ? firstName   : '',
+      lastName:    typeof lastName    === 'string' ? lastName    : '',
+      email:       email as string,
+      companyName: companyName as string,
       companyDomain:        typeof companyDomain        === 'string'  ? companyDomain        : undefined,
       existingContactId:    typeof existingContactId    === 'string'  ? existingContactId    : undefined,
       existingCompanyId:    typeof existingCompanyId    === 'string'  ? existingCompanyId    : undefined,
@@ -56,7 +60,7 @@ export async function POST(req: NextRequest) {
       submitterEmail: session.user.email,
     })
 
-    const contactName = `${firstName} ${lastName}`
+    const contactName = `${firstName} ${lastName}`.trim() || (email as string)
     const resolvedDomain = typeof companyDomain === 'string' ? companyDomain : undefined
 
     // Fire email notifications — errors are logged but never fail the request
